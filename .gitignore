@@ -1,0 +1,39 @@
+node_modules/
+
+# SvelteKit / Vite
+.svelte-kit/
+build/
+.output/
+vite.config.*.timestamp-*
+
+# Vercel
+.vercel/
+
+# Env и секреты (Turso-токены и т.п.)
+.env
+.env.*
+!.env.example
+
+# Локальная БД libSQL
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Тесты
+coverage/
+test-results/
+playwright-report/
+
+# Локальные настройки Claude Code
+.claude/settings.local.json
+
+# ОС / редакторы
+.DS_Store
+Thumbs.db
+
+# Выход симулятора
+sim/out/
+
+# Скомпилированный Ink (собирается scripts/compile-ink.mjs в predev/prebuild/pretest)
+src/lib/content/ink/*.ink.json

@@ -1,0 +1,62 @@
+@import 'tailwindcss';
+
+@theme {
+	--color-bg: #0a1628;
+	--color-panel: #12233f;
+	--color-line: #1f3a63;
+	--color-ink: #e6edf7;
+	--color-muted: #8fa3bf;
+	--color-gold: #c9a227;
+	--color-ok: #3fb68b;
+	--color-warn: #e8a23a;
+	--color-danger: #e05252;
+	--color-fbi: #2f6fd6;
+	--color-cia: #6c8ead;
+	--color-police: #4fa3e0;
+	--color-usss: #2a9d8f;
+	--color-mossad: #5c7cfa;
+}
+
+html,
+body {
+	background: var(--color-bg);
+	color: var(--color-ink);
+	min-height: 100%;
+}
+
+body {
+	font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+:focus-visible {
+	outline: 2px solid var(--color-gold);
+	outline-offset: 2px;
+}
+
+@layer components {
+	.card {
+		@apply rounded-lg border border-line bg-panel p-3;
+	}
+	.btn {
+		@apply inline-flex cursor-pointer items-center justify-center gap-1 rounded-md border border-line bg-bg px-3 py-1.5 text-sm text-ink transition-colors hover:border-gold hover:text-gold disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink;
+	}
+	.btn-gold {
+		@apply border-gold bg-gold/15 text-gold hover:bg-gold/30;
+	}
+	.btn-danger {
+		@apply border-danger/60 text-danger hover:border-danger hover:text-danger;
+	}
+	.h2 {
+		@apply mb-2 text-xs font-semibold tracking-wider text-muted uppercase;
+	}
+	.chip {
+		@apply inline-block rounded border border-line px-1.5 py-0.5 text-xs text-muted;
+	}
+}
+
+path[data-state]:focus {
+	outline: none;
+}
+path[data-state]:focus-visible {
+	filter: brightness(1.6) drop-shadow(0 0 3px var(--color-gold));
+}
