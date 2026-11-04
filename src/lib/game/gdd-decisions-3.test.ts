@@ -258,3 +258,38 @@ describe('сейвы v3 → v4', () => {
 		expect(m.tasks.every((t) => t.disbandOnFail === false)).toBe(true);
 	});
 });
+
+describe('D-061: грейс для dismissed', () => {
+	it('кварталы ≤ DISMISS_GRACE_QUARTERS не в счётчике, штраф за слабый план действует', () => {
+		const s = fresh('dismiss-grace');
+		s.day = B.DISMISS_GRACE_QUARTERS * 90 - 1;
+		s.plan.quarter = B.DISMISS_GRACE_QUARTERS;
+		const rep = s.reputation;
+		stepDay(s);
+		expect(s.plan.criticalStreak).toBe(0);
+		expect(s.reputation).toBeLessThan(rep); // PLAN_FAIL_REP в грейс действует
+		expect(s.quests.some((q) => q.questId === 'hearings')).toBe(true);
+	});
+
+	it('предупреждение сдвигается: после (PLAN_CRITICAL_QUARTERS − 1) засчитанных кварталов', () => {
+		const s = fresh('dismiss-warn');
+		const warnQ = B.DISMISS_GRACE_QUARTERS + B.PLAN_CRITICAL_QUARTERS - 1;
+		advance(s, warnQ * 90 - 1, { ignorePause: true });
+		expect(s.log.some((e) => e.kind === 'plan_warning')).toBe(false);
+		advance(s, 1, { ignorePause: true });
+		expect(s.log.some((e) => e.kind === 'plan_warning')).toBe(true);
+		expect(s.outcome.status).toBe('active');
+	});
+});
+
+describe('rival_collapsing: запись журнала', () => {
+	it('в день конца квартала до его обработки disbandDay — сегодня', () => {
+		const s = fresh('collapse-q');
+		s.day = 89;
+		s.rivals[1].reputation = 0;
+		stepDay(s);
+		const e = s.log.find((x) => x.kind === 'rival_collapsing')!;
+		expect(e.data).toEqual({ rivalId: 'cia', disbandDay: 90 });
+		expect(s.rivals[1].alive).toBe(false);
+	});
+});

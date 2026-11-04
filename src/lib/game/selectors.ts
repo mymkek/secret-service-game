@@ -26,6 +26,7 @@ import {
 } from './formulas';
 import { caseAccessible, caseInterceptable, computeOpChance, targetDifficulty } from './ops';
 import { recruitMethodAvailable } from './networks';
+import { collapseDisbandDay } from './rivals';
 import { questChoices, type QuestChoice } from './quests';
 import { victoryConditions } from './victory';
 import type { Agent, Case, DeptKey, GameState, Legend, OpTarget, OpType, QuestSession, RecruitMethod, RivalId, TechId, VictoryPath } from './types';
@@ -181,7 +182,7 @@ export function selectRivals(s: GameState) {
 		absorbed: r.absorbed,
 		/** «На грани» (D-059): репутация 0, не действует, выбудет в конце квартала (disbandDay). */
 		collapsing: r.alive && r.collapsing,
-		disbandDay: r.alive && r.collapsing ? nextQuarterEndDay(s) : null,
+		disbandDay: r.alive && r.collapsing ? collapseDisbandDay(s) : null,
 		reputation: Math.floor(r.reputation),
 		influence: Math.floor(r.influence),
 		share: r.share,
@@ -506,10 +507,4 @@ export function selectSurvRollbackFloor(s: GameState): number {
 /** Номер месяца, который закончится следующим (для грейса банкротства). */
 function nextMonthEndMonth(s: GameState): number {
 	return Math.floor(s.day / B.DAYS_PER_MONTH) + 1;
-}
-
-/** День ближайшего конца квартала (когда «на грани» выбывает). */
-function nextQuarterEndDay(s: GameState): number {
-	const q = B.DAYS_PER_MONTH * 3;
-	return (Math.floor(s.day / q) + 1) * q;
 }

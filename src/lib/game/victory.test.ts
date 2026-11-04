@@ -145,8 +145,10 @@ describe('поражения (§8.6)', () => {
 		const s = fresh('dism');
 		s.reputation = 100;
 		s.influence = 100;
-		s.plan.criticalStreak = 2;
-		s.day = 89;
+		// Вне грейса D-061: квартал DISMISS_GRACE_QUARTERS + 1.
+		s.plan.quarter = B.DISMISS_GRACE_QUARTERS + 1;
+		s.plan.criticalStreak = B.PLAN_CRITICAL_QUARTERS - 1;
+		s.day = s.plan.quarter * 90 - 1;
 		stepDay(s);
 		expect(s.outcome.defeatReason).toBe('dismissed');
 	});

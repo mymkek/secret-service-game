@@ -195,12 +195,16 @@ export function quarterEnd(s: GameState): void {
 		addReputation(s, B.PLAN_FAIL_REP);
 		triggerHearings(s, 'plan');
 	}
-	if (ratio < B.PLAN_CRITICAL_RATIO) p.criticalStreak += 1;
-	else p.criticalStreak = 0;
-	if (p.criticalStreak >= B.PLAN_CRITICAL_QUARTERS) defeat(s, 'dismissed');
-	else if (p.criticalStreak === B.PLAN_CRITICAL_QUARTERS - 1) {
-		log(s, 'plan_warning', { streak: p.criticalStreak });
-		autopause(s, 'quarterReport');
+	// §8.6, D-061: кварталы ≤ DISMISS_GRACE_QUARTERS не идут в счётчик dismissed (и предупреждение сдвигается);
+	// штрафы за слабый план выше действуют и в грейс.
+	if (p.quarter > B.DISMISS_GRACE_QUARTERS) {
+		if (ratio < B.PLAN_CRITICAL_RATIO) p.criticalStreak += 1;
+		else p.criticalStreak = 0;
+		if (p.criticalStreak >= B.PLAN_CRITICAL_QUARTERS) defeat(s, 'dismissed');
+		else if (p.criticalStreak === B.PLAN_CRITICAL_QUARTERS - 1) {
+			log(s, 'plan_warning', { streak: p.criticalStreak });
+			autopause(s, 'quarterReport');
+		}
 	}
 	if (isOver(s)) return;
 

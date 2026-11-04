@@ -29,6 +29,10 @@ describe('баг 1 / D-059: соперник с репутацией ≤ 0 — �
 		expect(cia.alive).toBe(true);
 		expect(cia.collapsing).toBe(true);
 		expect(selectRivals(s).find((r) => r.id === 'cia')).toMatchObject({ collapsing: true, disbandDay: 90 });
+		// Запись журнала в момент перехода (вид rival_collapsing).
+		const e = s.log.find((x) => x.kind === 'rival_collapsing');
+		expect(e?.data).toEqual({ rivalId: 'cia', disbandDay: 90 });
+		expect(s.log.filter((x) => x.kind === 'rival_collapsing')).toHaveLength(1);
 		const next = cia.nextActionDay;
 		advance(s, 40, { ignorePause: true }); // день 85, через конец месяца 60 с дрейфом
 		expect(cia.reputation).toBe(0);

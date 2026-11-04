@@ -438,6 +438,8 @@ export const BALANCE = {
 	PLAN_CRITICAL_RATIO: 0.5,
 	/** кварт. — §8.6 */
 	PLAN_CRITICAL_QUARTERS: 3,
+	/** кварт. — §5.5, §8.6 */
+	DISMISS_GRACE_QUARTERS: 1,
 	/** доля — §4.4.2, §5.5 */
 	CONTROL_PLAN_REDUCTION: 0.3,
 	/** доля — §5.5 */

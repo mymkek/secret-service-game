@@ -551,7 +551,7 @@ export const LOG_KINDS = [
 	'lobby', 'loyalty_check_done', 'mole_found', 'month_money', 'national_protest', 'network_failed',
 	'network_up', 'op_cancelled', 'op_fail', 'op_started', 'op_success', 'plan_warning', 'poach', 'protests',
 	'quarter_report', 'quest_choice', 'quest_opened', 'random_find', 'recruit_failed', 'repr_built',
-	'repr_rollback', 'restore_state', 'rival_absorbed', 'rival_action', 'rival_disbanded', 'sabotage',
+	'repr_rollback', 'restore_state', 'rival_absorbed', 'rival_action', 'rival_collapsing', 'rival_disbanded', 'sabotage',
 	'scandal', 'scapegoat', 'source_recruited', 'surv_built', 'surv_rollback', 'tech_done',
 	'terror_race_lost', 'thaw', 'training_done', 'unrest_threshold', 'victory', 'zabroska_failed'
 ] as const;

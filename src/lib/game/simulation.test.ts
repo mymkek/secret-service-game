@@ -79,12 +79,14 @@ describe('1800 дней без действий игрока', () => {
 				invariants(s);
 			}
 			checkOutcome(s);
-			// План 0 каждый квартал. После D-060 расформирование не раньше M12 (грейс DISBAND_GRACE_QUARTERS),
-			// поэтому первым срабатывает «три квартала подряд план < PLAN_CRITICAL_RATIO» (§8.6) — dismissed на M9.
-			// TODO(gdd): D-060 ставит цель «не проигрывать в первые 12 месяцев», но у dismissed грейса нет.
+			// План 0 каждый квартал. Грейсы D-060/D-061: dismissed считается с квартала DISMISS_GRACE_QUARTERS + 1,
+			// расформирование — с DISBAND_GRACE_QUARTERS + 1. В quarterEnd dismissed проверяется до распределения,
+			// поэтому бездействующего увольняют на месяце (DISMISS_GRACE_QUARTERS + PLAN_CRITICAL_QUARTERS) × 3 = 12.
+			const q = B.DISMISS_GRACE_QUARTERS + B.PLAN_CRITICAL_QUARTERS;
 			expect(s.outcome.defeatReason).toBe('dismissed');
-			expect(s.outcome.month).toBe(B.PLAN_CRITICAL_QUARTERS * 3);
-			expect(s.plan.ratioHistory).toEqual(Array(B.PLAN_CRITICAL_QUARTERS).fill(0));
+			expect(s.outcome.month).toBe(q * 3);
+			expect(s.outcome.month).toBeGreaterThanOrEqual(12);
+			expect(s.plan.ratioHistory).toEqual(Array(q).fill(0));
 		}
 	});
 });

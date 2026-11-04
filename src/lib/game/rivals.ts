@@ -70,7 +70,16 @@ export function checkRivalCollapse(s: GameState): void {
 		if (!r.alive || r.collapsing || r.reputation > 0) continue;
 		r.collapsing = true;
 		r.reputation = 0;
+		log(s, 'rival_collapsing', { rivalId: r.id, disbandDay: collapseDisbandDay(s) });
 	}
+}
+
+/**
+ * День, когда «на грани» выбудет: конец текущего квартала плана. До обработки конца квартала
+ * (в тот же день) plan.quarter ещё старый — значит, сегодня; после неё — следующий.
+ */
+export function collapseDisbandDay(s: GameState): number {
+	return s.plan.quarter * B.DAYS_PER_MONTH * 3;
 }
 
 /**
