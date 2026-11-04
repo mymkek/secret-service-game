@@ -40,7 +40,7 @@ const loaded = deserialize(json);                  // с миграцией sche
 | `setPaused(s, bool)` | Пауза. При снятии паузы очищается `s.pauseReasons` |
 | `setSpeed(s, 1\|2\|3)` | Скорость. Влияет только на `realtimeToDays` |
 | `realtimeToDays(speed, elapsedMs, carryMs)` | Переводит мс в целые дни по `DAY_MS_BY_SPEED`, возвращает остаток |
-| `serialize(s)` / `deserialize(json)` | JSON для `saves.state_json`. `SCHEMA_VERSION` (сейчас 3) и `MIGRATIONS` лежат в `state.ts`; сейвы v1 и v2 мигрируют автоматически |
+| `serialize(s)` / `deserialize(json)` | JSON для `saves.state_json`. `SCHEMA_VERSION` (сейчас 4) и `MIGRATIONS` лежат в `state.ts`; сейвы v1–v3 мигрируют автоматически |
 | `cloneState(s)` | Глубокая копия |
 
 **Автопауза** (§3.4). Флаги лежат в `s.autopause` (по умолчанию `AUTOPAUSE_DEFAULTS`), их можно менять напрямую из настроек. Причины текущей паузы — в `s.pauseReasons` (ключи `AutopauseKey`).
@@ -65,7 +65,7 @@ const loaded = deserialize(json);                  // с миграцией sche
 
 Цели операций (`OpTarget`): `{kind:'rival', id}`, `{kind:'leader', id}`, `{kind:'senator', id:'senator_1'..}`, `{kind:'president'}`.
 
-Коды ошибок: `game_over`, `no_money`, `no_influence`, `agent_cap`, `agent_busy`, `agent_not_found`, `candidate_not_found`, `requirements`, `max_level`, `min_level`, `already_building`, `already_known`, `already_running`, `research_busy`, `previous_tier`, `apex_locked`, `no_research`, `cooldown`, `skill_cap`, `bad_value`, `bad_target`, `target_required`, `case_not_found`, `case_taken`, `bad_case_kind`, `no_jurisdiction`, `case_not_interceptable`, `not_enough_agents`, `too_many_agents`, `team_full`, `agent_forbids_dirty`, `op_not_found`, `agent_not_embedded`, `agent_not_abroad`, `need_embedded_agent`, `kompromat_not_found`, `fake_limit`, `no_pending_perk`, `quest_not_found`, `choice_not_found`, `choice_unavailable`, `no_idle_agent`, `no_kompromat`, `need_repr5`, `need_legal3`, `kompromat_unavailable`, `bad_actor`, `bad_action`, `rival_dead`, `credit_limit` (запуск операции превысил бы лимит кредита, D-051), `repr_requires_surv` (откат слежки ниже требования активных репрессий, D-054).
+Коды ошибок: `game_over`, `no_money`, `no_influence`, `agent_cap`, `agent_busy`, `agent_not_found`, `candidate_not_found`, `requirements`, `max_level`, `min_level`, `already_building`, `already_known`, `already_running`, `research_busy`, `previous_tier`, `apex_locked`, `no_research`, `cooldown`, `skill_cap`, `bad_value`, `bad_target`, `target_required`, `case_not_found`, `case_taken`, `bad_case_kind`, `no_jurisdiction`, `case_not_interceptable`, `not_enough_agents`, `too_many_agents`, `team_full`, `agent_forbids_dirty`, `op_not_found`, `agent_not_embedded`, `agent_not_abroad`, `need_embedded_agent`, `kompromat_not_found`, `fake_limit`, `no_pending_perk`, `quest_not_found`, `choice_not_found`, `choice_unavailable`, `no_idle_agent`, `no_kompromat`, `need_repr5`, `need_legal3`, `kompromat_unavailable`, `bad_actor`, `bad_action`, `rival_dead`, `credit_limit` (запуск операции превысил бы лимит кредита, D-051), `repr_requires_surv` (откат слежки ниже требования активных репрессий, D-054), `rival_collapsing` (действие ИИ «на грани», D-059). У `counterKompromat` теперь бывает `cooldown` (D-057).
 
 **Деньги (D-037, D-051).** Найм, стройка, исследования, действия и платные варианты квестов требуют `budget ≥ цены`. Исключение — запуск операций: он разрешён, пока бюджет после оплаты не ниже `−creditLimit`, где `creditLimit = round(CREDIT_LIMIT_MONTHS × lastIncome)`. В конце месяца, сразу после расходов, на долг начисляется `CREDIT_INTEREST_RATE`. Банкротство — по-прежнему 3 месяца подряд с бюджетом < 0.
 
@@ -75,15 +75,15 @@ const loaded = deserialize(json);                  // с миграцией sche
 |---|---|
 | `selectDate(s)` | дата, месяц, квартал, пауза, скорость |
 | `selectResources(s)` | верхняя панель: шкалы (`Math.floor`), бюджет, `creditLimit`, `debt`, компромат, лимит агентов, доля, шанс скандала, план |
-| `selectCredit(s): CreditView` | кредит на операции: `limit`, `debt`, `availableForOps`, `interestRate`, `nextInterest`, `bankruptStreak`, `bankruptMonths` |
+| `selectCredit(s): CreditView` | кредит на операции: `limit`, `debt`, `availableForOps`, `interestRate`, `nextInterest`, `bankruptStreak`, `bankruptMonths`; грейс (D-060): `bankruptGraceMonthsLeft`, `disbandGraceQuartersLeft`, `hardFloor` |
 | `selectSurvRollbackFloor(s)` | ниже какого уровня слежку откатить нельзя из-за активных репрессий (D-054) |
 | `selectForecast(s)` | доход и расходы ближайшего конца месяца |
 | `selectAgents(s)`, `selectHirePool(s)`, `resolveAgentName(agent, names)` | персонал (крот скрыт) |
 | `selectCases(s)`, `previewOperation(s, {opType, agentIds, caseId?, target?})`, `selectOperations(s)` | операции: доступность по полномочиям, таймеры, шанс до старта (§5.2), прогресс |
-| `selectRivals(s)`, `selectKompromat(s)` | досье на конкурентов, известные действия, компромат |
+| `selectRivals(s)`, `selectKompromat(s)` | досье на конкурентов, известные действия, компромат; `collapsing` и `disbandDay` — соперник «на грани» (D-059) |
 | `selectDepartments(s)`, `selectBranches(s)`, `selectTechTree(s)` | отделы, слежка, репрессии, лидеры, технологии (`canBuild`/`canResearch` — код ошибки или `null`) |
 | `selectNetworks(s)`, `selectJurisdiction(s)` | сети за рубежом, карта полномочий |
-| `selectActionCosts(s): ActionCosts` | цены, траты влияния, откаты (`readyInDays`), шансы и риски, коды ошибок для `congressWork`, `prCampaign`, `loyaltyCheck`, а также по соперникам: `rivals[id].sabotage/lobby/poach/absorb`; `leak[]` — по каждому предмету компромата |
+| `selectActionCosts(s): ActionCosts` | цены, траты влияния, откаты (`readyInDays`), шансы и риски, коды ошибок для `congressWork`, `prCampaign`, `loyaltyCheck`, `counterKompromat`, а также по соперникам: `rivals[id].sabotage/lobby/poach/absorb`; `leak[]` — по каждому предмету компромата |
 | `selectDeployCost(s, legend, recruit): DeployCostView`, `selectDeployOptions(s)` | цена заброски (`LEGEND_COST` + деньги на вербовку) и таблица легенд и способов вербовки |
 | `selectSenators(s): SenatorView[]` | бюджетный комитет: `id` (ключ имени в контенте), `index`, `resistance`, сложность слежки, компромат, откат шантажа |
 | `selectQuests(s)` | открытые сессии с доступными выборами |
