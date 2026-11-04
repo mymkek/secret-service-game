@@ -72,6 +72,7 @@ export function performRivalAction(s: GameState, id: RivalId, action: AiActionTy
 	let detected = false;
 	if (hostile) detected = roll(s, aiDetectChance(ci));
 	const E = B.AI_EFFECTS;
+	let attacked: RivalId | null = null;
 
 	if (success) {
 		switch (action) {
@@ -88,6 +89,7 @@ export function performRivalAction(s: GameState, id: RivalId, action: AiActionTy
 				const others = s.rivals.filter((x) => x.alive && !x.collapsing && x.id !== id);
 				const t = pickOne(s, others);
 				if (t) addRivalRep(t, E.ATTACK_RIVAL.rep);
+				attacked = t?.id ?? null;
 				break;
 			}
 			case 'SURVEIL_PLAYER':
@@ -123,6 +125,12 @@ export function performRivalAction(s: GameState, id: RivalId, action: AiActionTy
 				}
 				break;
 		}
+	}
+	// Лента: открытые действия видны всегда, враждебные — только с установленным источником (§6.4).
+	if (!hostile || detected) {
+		s.rivalFeed.push({ day: s.day, rivalId: id, action, success, hostile, targetRivalId: attacked });
+		const extra = s.rivalFeed.length - B.RIVAL_FEED_MAX_ENTRIES;
+		if (extra > 0) s.rivalFeed.splice(0, extra);
 	}
 	// Журнал разведки: видны только удачные действия и обнаруженные неудачи (§6.4).
 	if (hostile && (success || detected)) {

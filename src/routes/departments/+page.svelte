@@ -4,7 +4,7 @@
 	import { BALANCE, selectBranches, selectSurvRollbackFloor, selectDepartments, selectTechTree, validateAction, type PlayerAction } from '../../lib/game/index';
 	import { game, fmtMoney } from '../../lib/ui/game.svelte';
 	import { stateName } from '../../lib/ui/content';
-	import { DEPT_HINT, DEPT_LABEL, TECH_BRANCH, TECH_LABEL, errorText } from '../../lib/ui/labels';
+	import { DEPT_HINT, DEPT_LABEL, TECH_BRANCH, TECH_LABEL, blockText, errorText } from '../../lib/ui/labels';
 	import { reprLevelNames, survLevelNames, techNames } from '../../lib/content/index';
 	import Bar from '../../lib/ui/Bar.svelte';
 
@@ -40,10 +40,10 @@
 					{#if d.building}
 						<p class="text-xs text-warn">Строится ур. {d.building.targetLevel}: ещё {Math.max(0, d.building.doneDay - day)} дн.</p>
 					{:else if d.nextCost !== null}
-						<button class="btn btn-gold w-full text-xs" disabled={!!d.canBuild} title={errorText(d.canBuild)} onclick={() => confirmAction.ask(buildInfo(DEPT_LABEL[d.key], d.nextCost ?? 0), () => game.act({ type: 'buildDept', dept: d.key }, 'Строительство начато'))}>
+						<button class="btn btn-gold w-full text-xs" disabled={!!d.canBuild} title={blockText(d.canBuild, d.missing)} onclick={() => confirmAction.ask(buildInfo(DEPT_LABEL[d.key], d.nextCost ?? 0), () => game.act({ type: 'buildDept', dept: d.key }, 'Строительство начато'))}>
 							Улучшить до ур. {d.level + 1} — {fmtMoney(d.nextCost)}
 						</button>
-						{#if d.canBuild}<p class="text-xs text-warn">{errorText(d.canBuild)}</p>{/if}
+						{#if d.canBuild}<p class="text-xs text-warn">{blockText(d.canBuild, d.missing)}</p>{/if}
 					{:else}
 						<p class="text-xs text-ok">Максимальный уровень</p>
 					{/if}
@@ -74,14 +74,14 @@
 					{/if}
 					<div class="flex flex-wrap gap-2">
 						{#if x.b.nextCost !== null && !x.b.building}
-							<button class="btn btn-gold text-xs" disabled={!!x.b.canBuild} title={errorText(x.b.canBuild)} onclick={() => game.act(x.build, 'Строительство начато')}>
+							<button class="btn btn-gold text-xs" disabled={!!x.b.canBuild} title={blockText(x.b.canBuild, x.b.missing)} onclick={() => game.act(x.build, 'Строительство начато')}>
 								Улучшить — {fmtMoney(x.b.nextCost)}
 							</button>
 						{/if}
 						<button class="btn btn-sm" disabled={!!rollbackErr(x.key, x.back)} title={errorText(rollbackErr(x.key, x.back))} onclick={() => game.act(x.back, 'Уровень снижен')}>Откатить на 1</button>
 						{#if rollbackErr(x.key, x.back) === 'repr_requires_surv'}<span class="self-center text-xs text-warn">Сначала откатите репрессии (слежка не ниже {survFloor})</span>{/if}
 					</div>
-					{#if x.b.canBuild && !x.b.building}<p class="text-xs text-warn">{errorText(x.b.canBuild)}</p>{/if}
+					{#if x.b.canBuild && !x.b.building}<p class="text-xs text-warn">{blockText(x.b.canBuild, x.b.missing)}</p>{/if}
 				</article>
 			{/each}
 		</section>
@@ -125,8 +125,8 @@
 							{:else if t.researching}
 								<div class="text-xs text-warn">Исследуется…</div>
 							{:else}
-								<button class="btn btn-gold w-full text-xs" disabled={!!t.canResearch} title={errorText(t.canResearch)} onclick={() => game.act({ type: 'research', tech: t.id }, 'Исследование начато')}>Изучить</button>
-								{#if t.canResearch}<div class="text-xs text-warn">{t.apexLocked ? 'Выбрана другая вершина' : errorText(t.canResearch)}</div>{/if}
+								<button class="btn btn-gold w-full text-xs" disabled={!!t.canResearch} title={blockText(t.canResearch, t.missing)} onclick={() => game.act({ type: 'research', tech: t.id }, 'Исследование начато')}>Изучить</button>
+								{#if t.canResearch}<div class="text-xs text-warn">{t.apexLocked ? 'Выбрана другая вершина' : blockText(t.canResearch, t.missing)}</div>{/if}
 							{/if}
 						</article>
 					{/each}

@@ -889,6 +889,8 @@ export const BALANCE = {
 	// A.14 Прочее
 	/** шт. — §11.3 */
 	LOG_MAX_ENTRIES: 200,
+	/** шт. — §6.4, §11.3 */
+	RIVAL_FEED_MAX_ENTRIES: 90,
 	/** флаги — §3.4 */
 	AUTOPAUSE_DEFAULTS: {"chanceCard":true,"quarterReport":true,"hearings":true,"questChoice":true,"election":true,"outcome":true,"agentDefected":true,"networkFailed":true,"moleFound":true,"unrestThreshold":true,"investigationThreshold":true,"firstNegativeBudget":true,"raiseRequest":true,"caseExpiring":false,"operationDone":false},
 	/** дней — §3.4 */

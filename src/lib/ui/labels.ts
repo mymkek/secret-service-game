@@ -1,6 +1,6 @@
 // Русские подписи для идентификаторов ядра. Тексты контента (src/lib/content) имеют приоритет — см. content.ts.
 import { deptNames, opTexts, perkNames, techNames } from '../content/index';
-import { BALANCE, type DeptKey, type OpType, type Rank, type RivalId, type SkillKey, type TechId, type VictoryPath } from '../game/index';
+import { BALANCE, type DeptKey, type Requirement, type OpType, type Rank, type RivalId, type SkillKey, type TechId, type VictoryPath } from '../game/index';
 
 export const DEPT_LABEL: Record<DeptKey, string> = deptNames;
 export const DEPT_HINT: Record<DeptKey, string> = {
@@ -326,3 +326,18 @@ export function fmtDay(day: number): string {
 	const m = Math.max(1, Math.ceil(day / 30));
 	return `год ${Math.ceil(m / 12)}, месяц ${m}, день ${((Math.max(1, day) - 1) % 30) + 1}`;
 }
+
+/** «Нужно: Слежка 2, Киберотдел 1, A1» — расшифровка кода requirements по невыполненной части требования. */
+export function reqText(r: Requirement | null | undefined): string {
+	if (!r) return '';
+	const parts: string[] = [];
+	if (r.surv) parts.push(`Слежка ${r.surv}`);
+	if (r.repr) parts.push(`Репрессии ${r.repr}`);
+	for (const [k, v] of Object.entries(r.dept ?? {})) parts.push(`${DEPT_LABEL[k as DeptKey]} ${v}`);
+	for (const t of r.tech ?? []) parts.push(TECH_LABEL[t]);
+	return parts.length ? `Нужно: ${parts.join(', ')}` : '';
+}
+
+/** Текст причины блокировки: для requirements — что именно не выполнено. */
+export const blockText = (e: string | null | undefined, missing?: Requirement | null): string =>
+	(e === 'requirements' || e === 'previous_tier') && missing ? reqText(missing) : errorText(e);

@@ -165,7 +165,7 @@ describe('сейвы v6 → v7', () => {
 		for (const p of raw.dilemmas.pending) delete p.assignedDay, delete p.prevLastDay;
 		const m = deserialize(raw);
 		expect(m.schemaVersion).toBe(SCHEMA_VERSION);
-		expect(SCHEMA_VERSION).toBe(7);
+		expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(7);
 		expect(m.dilemmas.pending).toEqual([{ dilemmaId: 'sting', opId: a.id, phase: 'mid', assignedDay: null, prevLastDay: null }]);
 		cancel(m, a.id);
 		expect(m.dilemmas.nextDay).toBe(m.day + B.DILEMMA_COOLDOWN_DAYS);

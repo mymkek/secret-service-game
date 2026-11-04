@@ -375,7 +375,7 @@ describe('сейвы v5 → v6', () => {
 				delete op[k];
 		const m = deserialize(raw);
 		expect(m.schemaVersion).toBe(SCHEMA_VERSION);
-		expect(SCHEMA_VERSION).toBe(7);
+		expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(7);
 		expect(m.dilemmas).toEqual({ nextDay: 0, lastDayById: {}, pending: [], signalReal: {} });
 		expect(m.delayed).toEqual([]);
 		expect(m.valuableSource).toBeNull();

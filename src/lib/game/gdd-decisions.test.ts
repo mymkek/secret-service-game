@@ -5,7 +5,7 @@ import { SCHEMA_VERSION, advance, applyAction, autoChoice, createGame, deseriali
 import { rivalActionChance } from './ai/actions';
 import { applyCard } from './cards';
 import { contentToConfig, ContentBundleSchema } from './content-schema';
-import { canResearch } from './development';
+import { canResearch, missingRequirement, survRequirement, techNode } from './development';
 import { aiSuccessChance, coupChance, unrestMonthly } from './formulas';
 import { captureAbroad, loyaltyBand } from './networks';
 import { spawnCase, targetDifficulty } from './ops';
@@ -214,6 +214,7 @@ describe('D-047 и прочее', () => {
 		const s = rich('reqs');
 		s.departments.analytics = 1;
 		expect(canResearch(s, 'A1')).toBe('requirements'); // нужна Слежка 2
+		expect(missingRequirement(s, techNode('A1').req)).toEqual({ surv: 2 });
 		s.survLevel = 2;
 		expect(canResearch(s, 'A1')).toBeNull();
 		s.techs.push('B1');
@@ -225,6 +226,7 @@ describe('D-047 и прочее', () => {
 		s.survLevel = 5;
 		s.departments.cyber = 5;
 		expect(validateAction(s, { type: 'buildSurv' })).toBe('requirements'); // 6-й уровень требует A2
+		expect(missingRequirement(s, survRequirement(6))).toEqual({ tech: ['A2'] });
 		s.techs.push('A1', 'A2');
 		expect(validateAction(s, { type: 'buildSurv' })).toBeNull();
 	});

@@ -596,6 +596,7 @@ H = clamp(AI_HOSTILITY_BASE + AI_HOSTILITY_SHARE_COEF * (share_player - 1/N_aliv
 **Шанс успеха:** `p = clamp(base + AI_SHARE_COEF * (share_ai - AI_SHARE_PIVOT) - CI_DEFENSE_PER_LEVEL * dept.counterintel * [hostile] - AI_POLICE_PENALTY * [police], AI_CHANCE_MIN, AI_CHANCE_MAX)` (0.4; 0.25; 0.05; 0.05..0.9). `share_ai` — доля ИИ из последнего распределения.
 **Крот** (`moleFor`): −0.10 к шансу любой операции с его участием; каждый месяц `roll(0.5)` → его ИИ +1 компромат на игрока. Пассивно раскрывается раз в месяц с шансом `MOLE_PASSIVE_DETECT_PER_CI * КР` (0.05·КР).
 **Обнаружение:** каждое враждебное действие (и удачное, и нет) попадает в журнал с указанием источника с шансом `clamp(AI_DETECT_BASE + AI_DETECT_PER_CI * КР, 0, 0.95)` (0.2 + 0.15·КР), иначе «неизвестный источник». Неудачное и необнаруженное действие игрок не видит.
+**Лента конкурентов (D-070):** открытые действия (`WORK_PLAN`, `PR`, `LOBBY_SELF`, `ATTACK_RIVAL` — с целью) видны всегда, удачные и нет; враждебные — только с установленным источником. Хранится отдельно от журнала, последние `RIVAL_FEED_MAX_ENTRIES` (90) записей. На числа не влияет.
 **ИИ против ИИ** моделируется абстрактно (только `ATTACK_RIVAL`), чтобы три ИИ не уничтожили друг друга без участия игрока.
 
 ### 6.5 Конкуренты копают под тебя
@@ -1122,6 +1123,7 @@ SvelteKit + Svelte 5 + TypeScript; Vercel (`@sveltejs/adapter-vercel`); libSQL: 
   - `history` — счётчики для эпилога (что входит в `linesStarted` и `linesCompleted` — §9.9): `forcedConfessions, falseConfessions, falseReviews, stings, stingsWouldntAct, stingsExposed, informantCrimes, sourceExposed, signals, signalsReal, signalsPrevented, signalsPreventedDirty, missedSignals, innocentsSurveilled, innocentsDetained, warrantsFudged, fudgeCaught, coverRomances, coverScandals, sharedWithCia, electionMeddling ('none'|'public'|'leak'), leakRevealed, linesStarted, linesCompleted, linesProvoked, lineCrimes, lineAgentsLost, lineExposed`.
   - Поля сущностей: `Case.tag: 'sting' | 'signal' | 'real_culprit' | 'source' | null` и `Case.signalRef` (ссылка на сигнал); `Operation.dilemmaBonus` (сумма прибавок из дилемм, входит в `bonus`), `Operation.warrantSkipped`; `Agent.coverLife: boolean`; локация агента `{ lineId: 'vanguard' }`.
 - `log[]` — журнал событий (последние 200 записей, старые отбрасываются).
+- `rivalFeed[]` — лента действий соперников `{ day, rivalId, action, success, hostile, targetRivalId }` (последние 90, §6.4).
 - `outcome` `{ status: 'active'|'won'|'lost', victoryPath, defeatReason, month }`.
 
 ### 11.4 Палитра (восстановлено по PDF, в txt колонки съехали)
@@ -1641,6 +1643,7 @@ SvelteKit + Svelte 5 + TypeScript; Vercel (`@sveltejs/adapter-vercel`); libSQL: 
 | КЛЮЧ | значение | единица | где используется |
 |---|---|---|---|
 | LOG_MAX_ENTRIES | 200 | шт. | §11.3 |
+| RIVAL_FEED_MAX_ENTRIES | 90 | шт. | §6.4, §11.3 |
 | AUTOPAUSE_DEFAULTS | {"chanceCard":true,"quarterReport":true,"hearings":true,"questChoice":true,"election":true,"outcome":true,"agentDefected":true,"networkFailed":true,"moleFound":true,"unrestThreshold":true,"investigationThreshold":true,"firstNegativeBudget":true,"raiseRequest":true,"caseExpiring":false,"operationDone":false} | флаги | §3.4 |
 | CASE_EXPIRING_WARN_DAYS | 3 | дней | §3.4 |
 

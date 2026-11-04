@@ -39,6 +39,29 @@ export function meetsRequirement(s: GameState, r: Requirement): boolean {
 	return (r.tech ?? []).every((t) => hasTech(s, t));
 }
 
+/** Невыполненная часть требования (для подсказки в UI); null — всё выполнено. */
+export function missingRequirement(s: GameState, r: Requirement): Requirement | null {
+	const out: Requirement = {};
+	if (r.surv !== undefined && s.survLevel < r.surv) out.surv = r.surv;
+	if (r.repr !== undefined && s.reprLevel < r.repr) out.repr = r.repr;
+	const depts = Object.entries(r.dept ?? {}).filter(([k, v]) => dept(s, k as DeptKey) < (v ?? 0));
+	if (depts.length) out.dept = Object.fromEntries(depts);
+	const techs = (r.tech ?? []).filter((t) => !hasTech(s, t));
+	if (techs.length) out.tech = techs;
+	return Object.keys(out).length ? out : null;
+}
+
+/** Требование следующего уровня отдела, Слежки, Репрессий или технологии (то, что проверяют can*). */
+export function deptRequirement(d: DeptKey, level: number): Requirement {
+	return { dept: deptReqs(d, level) };
+}
+
+export function survRequirement(level: number): Requirement {
+	const r: Requirement = { dept: { cyber: B.SURV_REQ_CYBER[level - 1] ?? 0 } };
+	if (level === 6) r.tech = [B.SURV_L6_REQ_TECH as TechId];
+	return r;
+}
+
 function deptReqs(d: DeptKey, level: number): Partial<Record<DeptKey, number>> {
 	const table = (B.DEPT_REQUIREMENTS as Record<string, Record<string, Partial<Record<DeptKey, number>>>>)[d] ?? {};
 	const out: Partial<Record<DeptKey, number>> = {};
@@ -67,8 +90,7 @@ export function canBuildSurv(s: GameState): string | null {
 	const next = s.survLevel + 1;
 	if (next > B.SURV_COST_BY_LEVEL.length) return 'max_level';
 	if (s.builds.some((b) => b.kind === 'surv')) return 'already_building';
-	if (dept(s, 'cyber') < B.SURV_REQ_CYBER[next - 1]) return 'requirements';
-	if (next === 6 && !hasTech(s, B.SURV_L6_REQ_TECH as TechId)) return 'requirements';
+	if (!meetsRequirement(s, survRequirement(next))) return 'requirements';
 	if (s.budget < B.SURV_COST_BY_LEVEL[next - 1]) return 'no_money';
 	return null;
 }

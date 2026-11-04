@@ -533,6 +533,17 @@ export interface Counters {
 
 export type LogValue = number | string | boolean | null;
 
+/** Что игрок знает о действии соперника (лента на вкладке «Конкуренты», §6.4). */
+export interface RivalFeedEntry {
+	day: number;
+	rivalId: RivalId;
+	action: string;
+	success: boolean;
+	hostile: boolean;
+	/** Для ATTACK_RIVAL — по кому ударили. */
+	targetRivalId: RivalId | null;
+}
+
 export interface LogEntry {
 	id: number;
 	day: number;
@@ -748,6 +759,8 @@ export interface GameState {
 	history: EpilogueHistory;
 
 	log: LogEntry[];
+	/** Отдельно от log, чтобы будничная работа соперников не вытесняла журнал игрока. */
+	rivalFeed: RivalFeedEntry[];
 	outcome: Outcome;
 }
 

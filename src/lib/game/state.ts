@@ -13,7 +13,7 @@ import type { AutopauseFlags, DeptKey, GameConfig, GameState, Jurisdiction, Netw
 import { RIVAL_IDS } from './types';
 
 /** Текущая версия схемы сохранения. Повышать при несовместимых изменениях GameState. */
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 
 export interface NewGameOptions {
@@ -163,6 +163,7 @@ export function createGame(opts: NewGameOptions): GameState {
 		election: emptyElection(),
 		history: emptyHistory(),
 		log: [],
+		rivalFeed: [],
 		outcome: { status: 'active', victoryPath: null, defeatReason: null, month: null, day: null, score: null }
 	};
 
@@ -264,6 +265,12 @@ export const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record
 			if (p.assignedDay === undefined) p.assignedDay = null;
 			if (p.prevLastDay === undefined) p.prevLastDay = null;
 		}
+		return r;
+	},
+	// v7 → v8: лента действий соперников (до этого не велась).
+	7: (raw) => {
+		const r = raw as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+		r.rivalFeed = r.rivalFeed ?? [];
 		return r;
 	}
 };

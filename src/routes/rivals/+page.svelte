@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { selectActionCosts, selectKompromat, selectRivals, validateAction, type PlayerAction } from '../../lib/game/index';
+	import { selectActionCosts, selectKompromat, selectRivals, validateAction, type PlayerAction, type RivalFeedEntry } from '../../lib/game/index';
 	import { game } from '../../lib/ui/game.svelte';
-	import { rivalDossiers } from '../../lib/content/index';
+	import { rivalActionPhrases, rivalDossiers } from '../../lib/content/index';
 	import { AGENCY_VAR, fmtDay, rivalName } from '../../lib/ui/labels';
 	import ActionButton from '../../lib/ui/ActionButton.svelte';
 	import { senatorName } from '../../lib/ui/content';
@@ -25,6 +25,30 @@
 		{ type: 'poach', label: 'Переманить агента' },
 		{ type: 'absorb', label: 'Поглотить' }
 	] as const;
+
+	const FEED_DAYS = 90;
+	const FOCUS: Record<string, string> = { WORK_PLAN: 'план', PR: 'пиар', LOBBY_SELF: 'Конгресс', ATTACK_RIVAL: 'удары по конкурентам' };
+
+	const shortDay = (d: number) => `м.${Math.max(1, Math.ceil(d / 30))}, д.${((Math.max(1, d) - 1) % 30) + 1}`;
+
+	function feedText(e: RivalFeedEntry): string {
+		const ph = rivalActionPhrases[e.action];
+		const t = ph ? (e.success ? ph.ok : ph.fail) : e.action;
+		return e.targetRivalId ? `${t} (${rivalName(e.targetRivalId)})` : t;
+	}
+
+	/** Чем соперник занят в последние FEED_DAYS дней: открытые действия по частоте, враждебные одной строкой. */
+	function focus(feed: RivalFeedEntry[]): { label: string; n: number; hostile: boolean }[] {
+		const recent = feed.filter((e) => e.day > day - FEED_DAYS);
+		const counts = new Map<string, number>();
+		for (const e of recent) {
+			const k = e.hostile ? 'hostile' : e.action;
+			counts.set(k, (counts.get(k) ?? 0) + 1);
+		}
+		return [...counts]
+			.map(([k, n]) => ({ label: k === 'hostile' ? 'против вас' : (FOCUS[k] ?? k), n, hostile: k === 'hostile' }))
+			.sort((a, b) => b.n - a.n);
+	}
 
 	function kTarget(t: { kind: string; id?: unknown }): string {
 		if (t.kind === 'rival') return rivalName(String(t.id));
@@ -71,14 +95,21 @@
 					</div>
 
 					<div>
-						<div class="h2">Известные действия</div>
-						<ul class="max-h-40 space-y-1 overflow-y-auto text-xs">
-							{#each r.knownActions.toReversed().slice(0, 12) as e (e.id)}
-							<li><span class="text-muted">д.{e.day}</span> {game.line(e).text}</li>
+						<div class="h2">Чем заняты</div>
+						{#if focus(r.feed).length}
+							<div class="mb-2 flex flex-wrap gap-1 text-xs">
+								<span class="self-center text-muted">за {FEED_DAYS} дн.:</span>
+								{#each focus(r.feed) as x (x.label)}<Chip tone={x.hostile ? 'danger' : 'default'}>{x.label} ×{x.n}</Chip>{/each}
+							</div>
+						{/if}
+						<ul class="max-h-48 space-y-1 overflow-y-auto text-xs">
+							{#each r.feed.toReversed().slice(0, 20) as e, i (i)}
+								<li class={e.hostile ? 'text-danger' : ''}><span class="text-muted">{shortDay(e.day)}</span> {feedText(e)}</li>
 							{:else}
-								<li class="text-muted">Ничего не известно.</li>
+								<li class="text-muted">Пока ничего не слышно.</li>
 							{/each}
 						</ul>
+						<p class="mt-1 text-[11px] text-muted">Открытые действия видны всегда. Враждебные попадают сюда, только если контрразведка установила источник.</p>
 					</div>
 				{/if}
 			</article>

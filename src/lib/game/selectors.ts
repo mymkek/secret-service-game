@@ -2,7 +2,9 @@
 import { BALANCE as B } from './balance';
 import { agentSalary, currentAgentCap, hasPerk, jurisdictionPoints } from './agents';
 import { creditLimit, opCost, survRequiredByRepression, validateAction } from './actions';
-import { canBuildDept, canBuildRepr, canBuildSurv, canResearch } from './development';
+import { canBuildDept, canBuildRepr, canBuildSurv, canResearch, deptRequirement, missingRequirement, reprRequirement, survRequirement, techNode, type Requirement } from './development';
+
+export type { Requirement };
 import { bankruptHardFloor, incomeForMonth, monthlyExpenses, type ExpenseBreakdown } from './economy';
 import { agentById, dept, dirtyCostMult, kompromatActive, month } from './effects';
 import {
@@ -216,7 +218,8 @@ export function selectRivals(s: GameState) {
 		coalition: s.coalition,
 		kompromatOnThem: s.kompromat.filter((k) => k.target.kind === 'rival' && k.target.id === r.id && kompromatActive(s, k)).length,
 		embeddedAgents: s.agents.filter((a) => a.status === 'embedded' && a.location && 'rivalId' in a.location && a.location.rivalId === r.id).map((a) => a.id),
-		knownActions: s.log.filter((e) => e.kind === 'rival_action' && e.source === r.id)
+		knownActions: s.log.filter((e) => e.kind === 'rival_action' && e.source === r.id),
+		feed: s.rivalFeed.filter((e) => e.rivalId === r.id)
 	}));
 }
 
@@ -233,7 +236,8 @@ export function selectDepartments(s: GameState) {
 			level: s.departments[d],
 			building: b ? { targetLevel: b.targetLevel, doneDay: b.doneDay } : null,
 			nextCost: next <= B.DEPT_MAX_LEVEL ? deptCost(next) : null,
-			canBuild: canBuildDept(s, d)
+			canBuild: canBuildDept(s, d),
+			missing: next <= B.DEPT_MAX_LEVEL ? missingRequirement(s, deptRequirement(d, next)) : null
 		};
 	});
 }
@@ -247,7 +251,8 @@ export function selectBranches(s: GameState) {
 			maxEver: s.survMaxEver,
 			building: sb ? { targetLevel: sb.targetLevel, doneDay: sb.doneDay } : null,
 			nextCost: B.SURV_COST_BY_LEVEL[s.survLevel] ?? null,
-			canBuild: canBuildSurv(s)
+			canBuild: canBuildSurv(s),
+			missing: s.survLevel < B.SURV_COST_BY_LEVEL.length ? missingRequirement(s, survRequirement(s.survLevel + 1)) : null
 		},
 		repression: {
 			level: s.reprLevel,
@@ -255,6 +260,7 @@ export function selectBranches(s: GameState) {
 			building: rb ? { targetLevel: rb.targetLevel, doneDay: rb.doneDay } : null,
 			nextCost: B.REPR_COST_BY_LEVEL[s.reprLevel] ?? null,
 			canBuild: canBuildRepr(s),
+			missing: s.reprLevel < B.REPR_COST_BY_LEVEL.length ? missingRequirement(s, reprRequirement(s.reprLevel + 1)) : null,
 			control: s.control,
 			unrest: s.unrest
 		},
@@ -270,6 +276,7 @@ export function selectTechTree(s: GameState) {
 		cost: techCost(t),
 		days: techDays(t),
 		canResearch: canResearch(s, t),
+		missing: missingRequirement(s, techNode(t).req),
 		apexLocked: techTier(t) === 3 && s.apexChosen !== null && s.apexChosen !== t
 	}));
 }
