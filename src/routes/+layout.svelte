@@ -26,7 +26,8 @@
 		{ href: '/personnel', label: 'Персонал' },
 		{ href: '/departments', label: 'Отделы и технологии' },
 		{ href: '/rivals', label: 'Конкуренты' },
-		{ href: '/networks', label: 'Сети за рубежом' }
+		{ href: '/networks', label: 'Сети за рубежом' },
+		{ href: '/rules', label: 'Правила' }
 	];
 
 	const pending = $derived(game.s ? selectQuests(game.s).filter((q) => q.waitUntilDay === null && q.choices.length > 0).length : 0);
