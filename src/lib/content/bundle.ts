@@ -1,7 +1,6 @@
 // Сборка и валидация бандла контента. Отдельный модуль, чтобы views.ts и log-text.ts
 // могли читать проверенный бандл без циклического импорта через index.ts.
 import { ContentBundleSchema } from '../game/content-schema';
-import { LOG_KINDS, PENDING_LOG_KINDS } from '../game/types';
 import chanceCards from './cards/chance.json';
 import { cases } from './cases';
 import { eventTexts } from './events';
@@ -25,8 +24,6 @@ export const questScripts = questsData as unknown as Record<string, QuestScript>
 /** Путь к скомпилированному Ink JSON внутри src/lib/content (компиляция .ink - задача scaffolder). */
 export const inkPath = (questId: string) => `ink/${questId}.ink.json`;
 
-const KNOWN_KINDS = new Set<string>([...LOG_KINDS, ...PENDING_LOG_KINDS]);
-
 /** Триггер новости кодируется первым тегом; id = `<триггер>_<номер>`. */
 const newsItems = Object.entries(newsData as Record<string, string[]>).flatMap(([trigger, list]) =>
 	list.map((text, i) => ({ id: `${trigger}_${i + 1}`, text, tags: [trigger] }))
@@ -38,10 +35,7 @@ export const content = ContentBundleSchema.parse({
 	leaderNames,
 	traits: traitsData,
 	cards: chanceCards,
-	// Тексты «будущих» видов (events.ts: FutureLogKind) попадают в бандл, только когда ядро знает вид.
-	events: Object.entries(eventTexts)
-		.filter(([kind]) => KNOWN_KINDS.has(kind))
-		.map(([kind, e]) => ({ kind, text: e.text, severity: e.severity })),
+	events: Object.entries(eventTexts).map(([kind, e]) => ({ kind, text: e.text, severity: e.severity })),
 	cases,
 	states,
 	senators,

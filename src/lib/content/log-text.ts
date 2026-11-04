@@ -1,4 +1,5 @@
 // Превращает запись журнала ядра (LogEntry) в готовый текст. UI вызывает renderLogEntry(entry, ctx).
+import { BALANCE as B } from '../game/balance';
 import { formatEventText } from '../game/content-schema';
 import type { LogEntry } from '../game/types';
 import chanceCards from './cards/chance.json';
@@ -38,6 +39,12 @@ const pct = (x: unknown) => (typeof x === 'number' ? `${Math.round(x * 100)}%` :
 const str = (x: unknown) => (typeof x === 'string' ? x : '');
 const rivalName = (id: unknown) => (typeof id === 'string' && id in rivalDossiers ? rivalDossiers[id as RivalId].shortName : '');
 
+/** Игровой день -> «год, месяц, день» (тот же формат, что fmtDay в UI; 30 дней в месяце, 12 месяцев в году). */
+export function formatGameDate(day: number): string {
+	const m = Math.max(1, Math.ceil(day / B.DAYS_PER_MONTH));
+	return `год ${Math.ceil(m / 12)}, месяц ${m}, день ${((Math.max(1, day) - 1) % B.DAYS_PER_MONTH) + 1}`;
+}
+
 /** Данные для подстановки: исходные поля записи плюс читаемые производные. */
 export function logTemplateData(entry: LogEntry, ctx: RenderContext = {}): Record<string, unknown> {
 	const d = entry.data;
@@ -48,6 +55,7 @@ export function logTemplateData(entry: LogEntry, ctx: RenderContext = {}): Recor
 	out.toName = rivalName(d.to) || 'соперник';
 	out.stateName = stateNames.get(str(d.stateId)) ?? str(d.stateId);
 	out.countryName = countryNames.get(str(d.countryId)) ?? str(d.countryId);
+	if (typeof d.disbandDay === 'number') out.disbandDate = formatGameDate(d.disbandDay);
 	out.senatorName = senatorNames.get(str(d.senatorId)) ?? str(d.senatorId);
 	out.deptName = deptNames[str(d.dept) as keyof typeof deptNames] ?? str(d.dept);
 	out.techName = techNames[str(d.techId) as keyof typeof techNames]?.name ?? str(d.techId);

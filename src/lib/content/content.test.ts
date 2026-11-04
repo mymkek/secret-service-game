@@ -84,7 +84,7 @@ describe('content: тексты событий', () => {
 		expect(content.events.map((e) => e.kind).sort()).toEqual(all.sort());
 		const collapsing = renderLogEntry({ id: 8, day: 3, kind: 'rival_collapsing', data: { rivalId: 'cia', disbandDay: 90 }, source: null });
 		expect(collapsing.text).toContain('ЦРУ');
-		expect(collapsing.text).toContain('90');
+		expect(collapsing.text).toContain('год 1, месяц 3, день 30');
 		expect(collapsing.text).not.toContain('{');
 		const burned: LogEntry = { id: 9, day: 3, kind: 'kompromat_burned', data: { kompromatId: 1, senatorId: 'senator_2' }, source: null };
 		const r = renderLogEntry(burned);
@@ -96,9 +96,9 @@ describe('content: тексты событий', () => {
 		const derived = [
 			'agentName', 'rivalName', 'toName', 'stateName', 'countryName', 'deptName', 'techName', 'questTitle',
 			'cardTitle', 'opName', 'courseName', 'rankName', 'legendName', 'methodName', 'archetypeName', 'actionText',
-			'ratioPct', 'sharePct', 'pathName', 'hearingReason', 'title', 'resultText', 'repLossRounded', 'senatorName'
+			'ratioPct', 'sharePct', 'pathName', 'hearingReason', 'title', 'resultText', 'repLossRounded', 'senatorName', 'disbandDate'
 		];
-		const raw = ['level', 'difficulty', 'income', 'expenses', 'budget', 'streak', 'agents', 'missing', 'quarter', 'points', 'target', 'disbandDay'];
+		const raw = ['level', 'difficulty', 'income', 'expenses', 'budget', 'streak', 'agents', 'missing', 'quarter', 'points', 'target'];
 		const known = new Set([...derived, ...raw]);
 		for (const [kind, e] of Object.entries(eventTexts)) {
 			for (const m of e.text.matchAll(/\{([a-zA-Z0-9_]+)\}/g)) expect(known.has(m[1]), `${kind}: {${m[1]}}`).toBe(true);
