@@ -1,6 +1,6 @@
 // Русские подписи для идентификаторов ядра. Тексты контента (src/lib/content) имеют приоритет — см. content.ts.
 import { deptNames, opTexts, perkNames, techNames } from '../content/index';
-import type { DeptKey, OpType, Rank, RivalId, SkillKey, TechId, VictoryPath } from '../game/index';
+import { BALANCE, type DeptKey, type OpType, type Rank, type RivalId, type SkillKey, type TechId, type VictoryPath } from '../game/index';
 
 export const DEPT_LABEL: Record<DeptKey, string> = deptNames;
 export const DEPT_HINT: Record<DeptKey, string> = {
@@ -61,6 +61,44 @@ export const PATH_LABEL: Record<VictoryPath, string> = {
 	monopoly: '«Монополия»: ФБР без конкурентов',
 	clean: '«Чистые руки»: честная служба',
 	cardinal: '«Кардинал»: серый кардинал'
+};
+
+/** Подсказка «как победить» для каждого пути (ГДД §8). Числа — из balance.ts. */
+export const PATH_HINT: Record<VictoryPath, { goal: string[]; how: string; cost: string }> = {
+	monopoly: {
+		goal: ['Все три ведомства-соперника расформированы или поглощены.'],
+		how: 'Слежка за соперниками ради компромата, сливы, подставы, лоббирование, поглощение ослабевших. Дерево технологий не нужно.',
+		cost: 'Грязные действия: растут засвеченность и «Под следствием», соперники объединяются против вас.'
+	},
+	cardinal: {
+		goal: [
+			'Действующий компромат на президента.',
+			`Компромат минимум на ${BALANCE.CARDINAL_SENATORS_REQUIRED} из ${BALANCE.BUDGET_COMMITTEE_SIZE} сенаторов бюджетного комитета.`,
+			`Оба условия держатся без перерыва ${BALANCE.CARDINAL_HOLD_DAYS} дн.`
+		],
+		how: `Слежка ${BALANCE.CARDINAL_PRESIDENT_MIN_SURV} (Кибер 5, технология A2) и ветка C1–C3. Компромат истекает, выборы могут его обнулить.`,
+		cost: `Пока идёт удержание: «Под следствием» +${BALANCE.CARDINAL_HOLD_INVESTIGATION} в месяц, шанс ${Math.round(BALANCE.CARDINAL_HOLD_BURN_CHANCE * 100)} % потерять компромат на сенатора.`
+	},
+	shadow: {
+		goal: [`Сеть уровня ${BALANCE.SHADOW_NETWORK_LEVEL}+ в Канаде, Мексике и на Кубе.`, `Держится без перерыва ${BALANCE.SHADOW_HOLD_DAYS} дн.`],
+		how: 'Ветка B1–B3, Контрразведка, агенты с навыком слежки за рубежом.',
+		cost: 'Агенты годами не раскрывают дела — план проседает; провалы сетей бьют по репутации и засвеченности.'
+	},
+	'1984': {
+		goal: ['Репрессии 7 активны и Слежка 6.', `Контроль населения ${BALANCE.VICTORY_1984_CONTROL}.`, `Всё это без перерыва ${BALANCE.VICTORY_1984_HOLD_DAYS} дн.`],
+		how: 'Кибер 5 и технология A3, Слежка 1–6, Репрессии 1–7.',
+		cost: 'Очень дорого; засвеченность и скандалы почти каждый квартал, высокое недовольство — бунты и риск переворота.'
+	},
+	clean: {
+		goal: [
+			`План без фальшивок выполнен минимум в ${BALANCE.CLEAN_MIN_QUARTERS_MET} из 20 кварталов.`,
+			`Репутация ≥ ${BALANCE.CLEAN_MIN_REPUTATION}, засвеченность < ${BALANCE.CLEAN_MAX_EXPOSURE}.`,
+			`Ни одного грязного действия, без репрессий, Слежка не выше ${BALANCE.CLEAN_MAX_SURV_LEVEL}.`,
+			'Проверяется только в конце 60-го месяца.'
+		],
+		how: 'Аналитика, Оперативный, Пиар, Юротдел, Контрразведка; раскрывайте дела и закрывайте план каждый квартал.',
+		cost: 'Против соперников — только пассивная защита. Второй невыполненный квартал или одно грязное действие закрывают путь.'
+	}
 };
 
 export const ERROR_LABEL: Record<string, string> = {

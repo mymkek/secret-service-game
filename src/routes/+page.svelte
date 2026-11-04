@@ -6,7 +6,7 @@
 	import OperationList from '../lib/ui/OperationList.svelte';
 	import EventLog from '../lib/ui/EventLog.svelte';
 	import { BALANCE } from '../lib/game/index';
-	import { PATH_LABEL } from '../lib/ui/labels';
+	import { PATH_HINT, PATH_LABEL } from '../lib/ui/labels';
 
 	let selected = $state<string | null>(null);
 
@@ -45,8 +45,23 @@
 				<div class="h2">Пути победы</div>
 				<ul class="space-y-1 text-sm">
 					{#each PATHS as p (p)}
-						<li class="flex items-start justify-between gap-2">
-							<span class={progress[p].met ? 'text-ok' : ''}>{PATH_LABEL[p]}</span>
+						{@const hint = PATH_HINT[p]}
+						<li class="group relative flex items-start justify-between gap-2 rounded px-1 -mx-1 hover:bg-line/40" aria-describedby="hint-{p}">
+							<span class="cursor-help underline decoration-dotted decoration-muted underline-offset-4 {progress[p].met ? 'text-ok' : ''}">{PATH_LABEL[p]}</span>
+							<div
+								id="hint-{p}"
+								role="tooltip"
+								class="pointer-events-none invisible absolute right-0 bottom-full z-30 mb-2 w-80 rounded-md border border-line bg-panel p-3 text-xs opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100"
+							>
+								<div class="mb-1 font-semibold text-gold">Условие победы</div>
+								<ul class="mb-2 list-disc space-y-0.5 pl-4">
+									{#each hint.goal as g, i (i)}<li>{g}</li>{/each}
+								</ul>
+								<div class="mb-0.5 font-semibold text-gold">Как идти</div>
+								<p class="mb-2">{hint.how}</p>
+								<div class="mb-0.5 font-semibold text-gold">Цена</div>
+								<p class="text-muted">{hint.cost}</p>
+							</div>
 							<span class="text-xs whitespace-nowrap text-muted">
 								{#if progress[p].holdDays !== undefined}удержание {progress[p].holdDays} из {HOLD[p]} дн.{/if}
 								{progress[p].met ? '✓' : ''}
