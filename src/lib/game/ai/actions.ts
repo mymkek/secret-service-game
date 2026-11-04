@@ -126,15 +126,19 @@ export function performRivalAction(s: GameState, id: RivalId, action: AiActionTy
 				break;
 		}
 	}
+	// Внедрённый агент докладывает обо всех враждебных действиях своего ведомства (D-071). Бросок
+	// обнаружения выше делается всегда, чтобы последовательность RNG не зависела от внедрения.
+	const insider = s.agents.some((a) => a.status === 'embedded' && a.location && 'rivalId' in a.location && a.location.rivalId === id);
+	const known = detected || insider;
 	// Лента: открытые действия видны всегда, враждебные — только с установленным источником (§6.4).
-	if (!hostile || detected) {
+	if (!hostile || known) {
 		s.rivalFeed.push({ day: s.day, rivalId: id, action, success, hostile, targetRivalId: attacked });
 		const extra = s.rivalFeed.length - B.RIVAL_FEED_MAX_ENTRIES;
 		if (extra > 0) s.rivalFeed.splice(0, extra);
 	}
-	// Журнал разведки: видны только удачные действия и обнаруженные неудачи (§6.4).
-	if (hostile && (success || detected)) {
-		log(s, 'rival_action', { action, success, targetAgentId: action === 'PLANT_MOLE' ? null : target?.id ?? null }, detected ? id : 'unknown');
+	// Журнал разведки: видны только удачные действия и известные неудачи (§6.4).
+	if (hostile && (success || known)) {
+		log(s, 'rival_action', { action, success, targetAgentId: action === 'PLANT_MOLE' ? null : target?.id ?? null }, known ? id : 'unknown');
 		if (success && action === 'POACH_AGENT') autopause(s, 'agentDefected');
 	}
 	return { rivalId: id, action, success, detected };
