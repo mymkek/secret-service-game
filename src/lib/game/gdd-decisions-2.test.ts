@@ -142,10 +142,11 @@ describe('D-051: кредит на операции', () => {
 		expect(validateAction(s, { type: 'startOp', opType: 'investigation', caseId: c2.id, agentIds: s.agents.slice(2, 4).map((a) => a.id) })).toBe('credit_limit');
 	});
 
-	it('после расходов конца месяца на долг начисляется CREDIT_INTEREST_RATE; банкротство — как раньше', () => {
+	it('после расходов конца месяца на долг начисляется CREDIT_INTEREST_RATE; счётчик банкротства — вне грейса', () => {
 		const s = fresh('interest');
-		s.budget = -5000;
-		s.day = 29;
+		// Долг выше жёсткого порога D-060 не берём: −1 месячный доход.
+		s.budget = -s.lastIncome * 2;
+		s.day = B.BANKRUPT_GRACE_MONTHS * B.DAYS_PER_MONTH + 29;
 		stepDay(s);
 		const m = s.log.filter((e) => e.kind === 'month_money').at(-1)!;
 		const interest = Number(m.data.interest);

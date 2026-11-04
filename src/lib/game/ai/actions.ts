@@ -85,7 +85,7 @@ export function performRivalAction(s: GameState, id: RivalId, action: AiActionTy
 				addRivalInfluence(r, E.LOBBY_SELF.infl);
 				break;
 			case 'ATTACK_RIVAL': {
-				const others = s.rivals.filter((x) => x.alive && x.id !== id);
+				const others = s.rivals.filter((x) => x.alive && !x.collapsing && x.id !== id);
 				const t = pickOne(s, others);
 				if (t) addRivalRep(t, E.ATTACK_RIVAL.rep);
 				break;

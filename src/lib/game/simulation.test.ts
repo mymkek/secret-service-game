@@ -79,11 +79,12 @@ describe('1800 дней без действий игрока', () => {
 				invariants(s);
 			}
 			checkOutcome(s);
-			// План 0 каждый квартал → доля < DISBAND_SHARE два распределения подряд (§6.6):
-			// бездействующее ведомство расформировывают в конце месяца 6.
-			expect(s.outcome.defeatReason).toBe('disbanded');
-			expect(s.outcome.month).toBe(6);
-			expect(s.plan.ratioHistory).toEqual([0, 0]);
+			// План 0 каждый квартал. После D-060 расформирование не раньше M12 (грейс DISBAND_GRACE_QUARTERS),
+			// поэтому первым срабатывает «три квартала подряд план < PLAN_CRITICAL_RATIO» (§8.6) — dismissed на M9.
+			// TODO(gdd): D-060 ставит цель «не проигрывать в первые 12 месяцев», но у dismissed грейса нет.
+			expect(s.outcome.defeatReason).toBe('dismissed');
+			expect(s.outcome.month).toBe(B.PLAN_CRITICAL_QUARTERS * 3);
+			expect(s.plan.ratioHistory).toEqual(Array(B.PLAN_CRITICAL_QUARTERS).fill(0));
 		}
 	});
 });

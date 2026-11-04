@@ -17,6 +17,7 @@ import {
 	addInfluence,
 	addInvestigation,
 	addReputation,
+	activeRivals,
 	aliveRivals,
 	autopause,
 	defeat,
@@ -25,7 +26,7 @@ import {
 	month
 } from './effects';
 import { triggerHearings } from './quest-core';
-import { removeRival, rivalQuarterPlans } from './rivals';
+import { removeRival, rivalQuarterPlans, rivalsCollapseAtQuarterEnd, smoothedPlanRatio } from './rivals';
 import { roll } from './rng';
 import type { AgencyId, GameState, Rival } from './types';
 
@@ -35,7 +36,11 @@ function cardActive(s: GameState, id: string): boolean {
 	return s.cards.active.some((c) => c.id === id && s.day < c.untilDay);
 }
 
-/** Веса живых ведомств: сначала игрок, затем соперники в фиксированном порядке. */
+/**
+ * Веса ведомств: сначала игрок, затем действующие соперники в фиксированном порядке.
+ * «На грани» (D-059) не участвует. plan_ratio соперников сглажен (D-058); для игрока
+ * сглаживание делает вызывающий (quarterEnd), сюда приходит уже готовое значение.
+ */
 export function distributionWeights(s: GameState, playerPlanRatio: number): { ids: AgencyId[]; weights: number[] } {
 	const ids: AgencyId[] = ['player'];
 	const weights: number[] = [
@@ -46,12 +51,12 @@ export function distributionWeights(s: GameState, playerPlanRatio: number): { id
 			mult: s.hearingMult * s.priorityMult
 		})
 	];
-	for (const r of aliveRivals(s)) {
+	for (const r of activeRivals(s)) {
 		let mult = r.lobbyMult * r.hearingMult * r.priorityMult;
 		if (r.id === 'secret_service') mult *= B.SS_PRESIDENT_FAVOR;
 		if (r.id === 'cia' && cardActive(s, 'diplomatic_crisis')) mult *= B.CARD_DIPLOMATIC_CRISIS.ciaWeightMult;
 		ids.push(r.id);
-		weights.push(agencyWeight({ planRatio: r.planRatio, reputation: r.reputation, influence: r.influence, mult }));
+		weights.push(agencyWeight({ planRatio: smoothedPlanRatio(r.planRatio, r.planRatioPrev), reputation: r.reputation, influence: r.influence, mult }));
 	}
 	return { ids, weights };
 }
@@ -60,6 +65,7 @@ export function distributionWeights(s: GameState, playerPlanRatio: number): { id
 export function distribute(s: GameState, playerPlanRatio: number): number {
 	const { ids, weights } = distributionWeights(s, playerPlanRatio);
 	const sh = shares(weights);
+	for (const r of s.rivals) if (r.alive && r.collapsing) r.share = 0;
 	ids.forEach((id, i) => {
 		if (id === 'player') s.share = sh[i];
 		else {
@@ -133,14 +139,17 @@ export function monthEndMoney(s: GameState): boolean {
 	const interest = s.budget < 0 ? Math.round(B.CREDIT_INTEREST_RATE * -s.budget) : 0;
 	if (interest > 0) addBudget(s, -interest);
 	log(s, 'month_money', { income, expenses: exp.total, interest, budget: s.budget, paid });
-	// 7.3 счётчик банкротства (§8.6)
+	// 7.3 счётчик банкротства (§8.6, D-060)
 	if (s.budget < 0) {
-		s.counters.bankruptStreak += 1;
+		// Грейс: месяцы 1..BANKRUPT_GRACE_MONTHS в счётчик не идут.
+		if (m > B.BANKRUPT_GRACE_MONTHS) s.counters.bankruptStreak += 1;
 		if (!s.counters.firstNegativeBudgetSeen) {
 			s.counters.firstNegativeBudgetSeen = true;
 			autopause(s, 'firstNegativeBudget');
 		}
 		if (s.counters.bankruptStreak >= B.BANKRUPT_MONTHS) defeat(s, 'bankrupt');
+		// Жёсткий порог долга — в любой месяц, без грейса.
+		else if (s.budget < -B.BANKRUPT_HARD_FLOOR_MONTHS * s.lastIncome) defeat(s, 'bankrupt');
 	} else s.counters.bankruptStreak = 0;
 	return paid;
 }
@@ -195,10 +204,14 @@ export function quarterEnd(s: GameState): void {
 	}
 	if (isOver(s)) return;
 
-	// Распределение бюджета.
+	// «На грани» выбывают до распределения (D-059), кроме тех, кого сейчас поглощают.
+	rivalsCollapseAtQuarterEnd(s);
+
+	// Распределение бюджета. В вес идёт сглаженный план (D-058), остальные правила — по текущему кварталу.
 	rivalQuarterPlans(s);
 	const m = month(s);
-	const shareNew = distribute(s, ratio);
+	const shareNew = distribute(s, smoothedPlanRatio(ratio, p.planRatioPrev));
+	p.planRatioPrev = ratio;
 	const taken = clawback(s.budget, poolMonthly(quarterIndexOfMonth(m + 1)), shareNew);
 	if (taken > 0) addBudget(s, -taken);
 
@@ -209,14 +222,16 @@ export function quarterEnd(s: GameState): void {
 		r.hearingMult = 1;
 	}
 
-	// Расформирование (§6.6).
-	if (s.share < B.DISBAND_SHARE) s.counters.lowShareStreak += 1;
-	else s.counters.lowShareStreak = 0;
-	for (const r of aliveRivals(s)) {
+	// Расформирование (§6.6). Игрок: первые DISBAND_GRACE_QUARTERS распределений не считаются (D-060).
+	if (p.quarter > B.DISBAND_GRACE_QUARTERS) {
+		if (s.share < B.DISBAND_SHARE) s.counters.lowShareStreak += 1;
+		else s.counters.lowShareStreak = 0;
+	}
+	for (const r of activeRivals(s)) {
 		// D-052: у ИИ свой порог выбытия.
 		if (r.share < B.RIVAL_DISBAND_SHARE) r.lowShareQuarters += 1;
 		else r.lowShareQuarters = 0;
-		if (r.lowShareQuarters >= B.DISBAND_QUARTERS || r.reputation <= 0) removeRival(s, r.id, false);
+		if (r.lowShareQuarters >= B.DISBAND_QUARTERS) removeRival(s, r.id, false);
 	}
 	if (s.counters.lowShareStreak >= B.DISBAND_QUARTERS) defeat(s, 'disbanded');
 

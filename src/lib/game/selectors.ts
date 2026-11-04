@@ -179,6 +179,9 @@ export function selectRivals(s: GameState) {
 		id: r.id,
 		alive: r.alive,
 		absorbed: r.absorbed,
+		/** «На грани» (D-059): репутация 0, не действует, выбудет в конце квартала (disbandDay). */
+		collapsing: r.alive && r.collapsing,
+		disbandDay: r.alive && r.collapsing ? nextQuarterEndDay(s) : null,
 		reputation: Math.floor(r.reputation),
 		influence: Math.floor(r.influence),
 		share: r.share,
@@ -311,6 +314,8 @@ export interface LeakCostView extends ActionCostView {
 export interface ActionCosts {
 	congressWork: ActionCostView;
 	prCampaign: ActionCostView;
+	/** Встречный компромат (D-057): откат; error учитывает наличие компромата на соперника. */
+	counterKompromat: ActionCostView;
 	loyaltyCheck: ActionCostView;
 	rivals: Record<RivalId, { sabotage: ActionCostView; lobby: ActionCostView; poach: ActionCostView; absorb: ActionCostView }>;
 	/** По предмету компромата на живого соперника. */
@@ -343,7 +348,7 @@ export function selectActionCosts(s: GameState): ActionCosts {
 				B.ACT_ABSORB.influence,
 				absorbTask ? absorbTask.doneDay - s.day : 0,
 				// D-052: шанс считается при запуске по влиянию до оплаты; во время выполнения — зафиксированный.
-				absorbTask?.chance ?? absorbChance(s.influence, r.reputation),
+				absorbTask?.chance ?? absorbChance(s.influence, r.reputation, r.collapsing),
 				null,
 				validateAction(s, { type: 'absorb', rivalId: r.id })
 			)
@@ -360,7 +365,16 @@ export function selectActionCosts(s: GameState): ActionCosts {
 			targetRepDelta: B.ACT_LEAK.repPerStrength * k.strength
 		});
 	}
+	const firstRivalK = s.kompromat.find((k) => k.target.kind === 'rival' && kompromatActive(s, k));
 	return {
+		counterKompromat: view(
+			0,
+			0,
+			s.counters.counterKompromatReadyDay - s.day,
+			null,
+			null,
+			validateAction(s, { type: 'counterKompromat', kompromatId: firstRivalK?.id ?? -1 })
+		),
 		congressWork: view(B.ACT_CONGRESS_WORK.cost, 0, s.counters.congressWorkReadyDay - s.day, null, null, validateAction(s, { type: 'congressWork' })),
 		prCampaign: view(B.PR_CAMPAIGN.cost, 0, s.counters.prCampaignReadyDay - s.day, null, null, validateAction(s, { type: 'prCampaign' })),
 		loyaltyCheck: view(
@@ -458,6 +472,12 @@ export interface CreditView {
 	/** Месяцев подряд с бюджетом < 0 и порог банкротства. */
 	bankruptStreak: number;
 	bankruptMonths: number;
+	/** D-060: сколько ближайших концов месяца ещё не идут в счётчик банкротства (0 — грейс кончился). */
+	bankruptGraceMonthsLeft: number;
+	/** D-060: бюджет ниже этого значения в конце месяца — банкротство сразу (−BANKRUPT_HARD_FLOOR_MONTHS × lastIncome). */
+	hardFloor: number;
+	/** D-060: сколько ближайших распределений не идут в счётчик расформирования. */
+	disbandGraceQuartersLeft: number;
 }
 
 /** §2.7, D-051: кредит на операции и долг. */
@@ -471,11 +491,25 @@ export function selectCredit(s: GameState): CreditView {
 		interestRate: B.CREDIT_INTEREST_RATE,
 		nextInterest: Math.round(B.CREDIT_INTEREST_RATE * debt),
 		bankruptStreak: s.counters.bankruptStreak,
-		bankruptMonths: B.BANKRUPT_MONTHS
+		bankruptMonths: B.BANKRUPT_MONTHS,
+		bankruptGraceMonthsLeft: Math.max(0, B.BANKRUPT_GRACE_MONTHS - nextMonthEndMonth(s) + 1),
+		hardFloor: -B.BANKRUPT_HARD_FLOOR_MONTHS * s.lastIncome,
+		disbandGraceQuartersLeft: Math.max(0, B.DISBAND_GRACE_QUARTERS - s.plan.quarter + 1)
 	};
 }
 
 /** D-054: минимальный уровень слежки, ниже которого откат запрещён (из-за активных репрессий). */
 export function selectSurvRollbackFloor(s: GameState): number {
 	return survRequiredByRepression(s);
+}
+
+/** Номер месяца, который закончится следующим (для грейса банкротства). */
+function nextMonthEndMonth(s: GameState): number {
+	return Math.floor(s.day / B.DAYS_PER_MONTH) + 1;
+}
+
+/** День ближайшего конца квартала (когда «на грани» выбывает). */
+function nextQuarterEndDay(s: GameState): number {
+	const q = B.DAYS_PER_MONTH * 3;
+	return (Math.floor(s.day / q) + 1) * q;
 }

@@ -178,9 +178,13 @@ export interface Rival {
 	id: RivalId;
 	alive: boolean;
 	absorbed: boolean;
+	/** «На грани» (D-059): репутация достигла 0; не действует, не в распределении, выбывает в конце квартала. */
+	collapsing: boolean;
 	reputation: number;
 	influence: number;
 	planRatio: number;
+	/** plan_ratio прошлого квартала для сглаживания веса (D-058); до первого распределения 1.0. */
+	planRatioPrev: number;
 	planBonusThisQuarter: number;
 	kompromatOnPlayer: number;
 	lobbyMult: number;
@@ -261,6 +265,8 @@ export interface PlanState {
 	metCount: number;
 	/** Множитель цели следующего квартала (карточка «Президент требует»). */
 	nextTargetMult: number;
+	/** plan_ratio (с учётом фальшивок, если не поймали) прошлого квартала — для сглаживания веса (D-058). */
+	planRatioPrev: number;
 }
 
 export interface ActiveCard {
@@ -306,6 +312,8 @@ export interface TimedTask {
 	questSessionId: number | null;
 	/** Шанс, зафиксированный при запуске (поглощение, D-052); иначе null. */
 	chance: number | null;
+	/** Поглощение цели «на грани», чьё выбытие ждёт исхода: провал — расформирование сразу (D-059). */
+	disbandOnFail: boolean;
 }
 
 export type QuestId =
@@ -354,6 +362,8 @@ export interface Counters {
 	unrest80Seen: boolean;
 	investigationAbove50: boolean;
 	prCampaignReadyDay: number;
+	/** Откат «Встречного компромата» (D-057). */
+	counterKompromatReadyDay: number;
 	congressWorkReadyDay: number;
 	informantReadyDay: number;
 	informantCasesUntilDay: number;

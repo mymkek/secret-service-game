@@ -61,7 +61,7 @@ import {
 import { crossBorder, shadowCountries } from './networks';
 import { caseAccessible, caseInterceptable, targetDifficulty } from './ops';
 import { blackmail, questChoiceError, resolveQuestChoice, scapegoat } from './quests';
-import { addRivalPlan, disbandZeroRepRivals, removeRival } from './rivals';
+import { addRivalPlan, checkRivalCollapse, removeRival } from './rivals';
 import { removeLeader, rollbackRepression } from './society';
 import { roll } from './rng';
 import type {
@@ -499,23 +499,31 @@ function handlePlayer(s: GameState, a: PlayerAction, dry: boolean): string | nul
 			const r = aliveRival(s, a.rivalId);
 			if (!r) return 'bad_target';
 			const A = B.ACT_ABSORB;
-			if (r.reputation >= A.maxTargetRep) return 'requirements';
-			if (s.influence < A.minInfluence) return 'no_influence';
+			// §6.3, D-059: обычное поглощение — или «на грани» при влиянии ≥ collapseMinInfluence.
+			if (r.collapsing) {
+				if (s.influence < A.collapseMinInfluence) return 'no_influence';
+			} else {
+				if (r.reputation >= A.maxTargetRep) return 'requirements';
+				if (s.influence < A.minInfluence) return 'no_influence';
+			}
 			if (s.tasks.some((t) => t.kind === 'absorb' && t.rivalId === r.id)) return 'already_running';
 			const e = needMoney(s, A.cost) ?? needInfluence(s, A.influence);
 			if (e || dry) return e;
-			// D-052: шанс фиксируется при запуске — по влиянию ДО оплаты и репутации цели сейчас.
-			const chance = absorbChance(s.influence, r.reputation);
+			// D-052: шанс фиксируется при запуске — по влиянию ДО оплаты и репутации цели сейчас (+collapseBonus «на грани»).
+			const chance = absorbChance(s.influence, r.reputation, r.collapsing);
 			addBudget(s, -A.cost);
 			addInfluence(s, -A.influence);
-			s.tasks.push({ id: newId(s), kind: 'absorb', doneDay: s.day + A.days, rivalId: r.id, questSessionId: null, chance });
+			s.tasks.push({ id: newId(s), kind: 'absorb', doneDay: s.day + A.days, rivalId: r.id, questSessionId: null, chance, disbandOnFail: false });
 			return null;
 		}
 		case 'counterKompromat': {
+			// D-057: откат ACT_COUNTER_KOMPROMAT.cooldownDays.
+			if (s.day < s.counters.counterKompromatReadyDay) return 'cooldown';
 			const k = rivalKompromat(s, a.kompromatId);
 			if (!k) return 'kompromat_not_found';
 			if (dry) return null;
 			const C = B.ACT_COUNTER_KOMPROMAT;
+			s.counters.counterKompromatReadyDay = s.day + C.cooldownDays;
 			s.kompromat = s.kompromat.filter((x) => x.id !== k.id);
 			addInvestigation(s, C.investigationBase + C.investigationPerStrength * k.strength, false);
 			const r = s.rivals.find((x) => x.id === k.target.id);
@@ -537,7 +545,7 @@ function handlePlayer(s: GameState, a: PlayerAction, dry: boolean): string | nul
 			const e = needMoney(s, C.cost);
 			if (e || dry) return e;
 			addBudget(s, -C.cost);
-			s.tasks.push({ id: newId(s), kind: 'loyalty_check', doneDay: s.day + C.days, rivalId: null, questSessionId: null, chance: null });
+			s.tasks.push({ id: newId(s), kind: 'loyalty_check', doneDay: s.day + C.days, rivalId: null, questSessionId: null, chance: null, disbandOnFail: false });
 			return null;
 		}
 		case 'restoreState': {
@@ -717,7 +725,7 @@ export function tickTasks(s: GameState): void {
 			const r = aliveRival(s, t.rivalId);
 			if (!r) continue;
 			const A = B.ACT_ABSORB;
-			if (roll(s, t.chance ?? absorbChance(s.influence, r.reputation))) {
+			if (roll(s, t.chance ?? absorbChance(s.influence, r.reputation, r.collapsing))) {
 				removeRival(s, r.id, true);
 				// Штаты цели переходят игроку внутри removeRival.
 				// D-047: новички из поглощения — без трейтов.
@@ -726,6 +734,8 @@ export function tickTasks(s: GameState): void {
 				addInfluence(s, A.failInfluence);
 				grudge(s, r.id, A.grudgeDays);
 				log(s, 'absorb_failed', { rivalId: r.id });
+				// D-059: «на грани», чьё выбытие ждало исхода поглощения, расформировывается сразу.
+				if (r.collapsing && t.disbandOnFail) removeRival(s, r.id, false);
 			}
 		}
 	}
@@ -741,14 +751,15 @@ export function applyAction(s: GameState, actor: Actor, action: GameAction): Act
 		if (action.type === 'ai') return { ok: false, error: 'bad_actor' };
 		const err = handlePlayer(s, action, false);
 		if (err) return { ok: false, error: err };
-		disbandZeroRepRivals(s);
+		checkRivalCollapse(s);
 		return { ok: true };
 	}
 	if (!RIVAL_IDS.includes(actor)) return { ok: false, error: 'bad_actor' };
 	if (action.type !== 'ai' || !isAiAction(action.action)) return { ok: false, error: 'bad_action' };
 	if (!aliveRival(s, actor)) return { ok: false, error: 'rival_dead' };
+	if (aliveRival(s, actor)!.collapsing) return { ok: false, error: 'rival_collapsing' };
 	const ai = performRivalAction(s, actor, action.action);
-	disbandZeroRepRivals(s);
+	checkRivalCollapse(s);
 	return { ok: true, ai };
 }
 

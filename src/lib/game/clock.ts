@@ -24,7 +24,7 @@ import { monthEndNetworks, tickMissions } from './networks';
 import { completeDueOperations, dailyCases } from './ops';
 import { monthEndPersonnel } from './personnel';
 import { monthEndQuestTriggers, tickQuests } from './quests';
-import { disbandZeroRepRivals, rivalMonthlyDrift } from './rivals';
+import { checkRivalCollapse, rivalMonthlyDrift } from './rivals';
 import { roll, shuffle, type RngHolder } from './rng';
 import { checkUnrestThresholds, monthEndExposure, monthEndSociety, recomputeControl } from './society';
 import { cardinalHoldStrike, checkOutcome, updateHoldCounters } from './victory';
@@ -114,7 +114,8 @@ export function stepDay(s: GameState, opts: StepOptions = {}): void {
 	const strategy = opts.strategy ?? chooseRivalAction;
 	for (const id of RIVAL_IDS) {
 		const r = rival(s, id);
-		if (!r.alive || r.nextActionDay > s.day) continue;
+		// «На грани» (D-059) не действует.
+		if (!r.alive || r.collapsing || r.nextActionDay > s.day) continue;
 		const action = strategy(buildRivalView(s, id), s);
 		if (action && AI_ACTIONS.includes(action)) applyAction(s, id, { type: 'ai', action });
 		r.nextActionDay += aiInterval(B.AI_ACTION_INTERVAL_DAYS[id], s.coalition);
@@ -123,12 +124,12 @@ export function stepDay(s: GameState, opts: StepOptions = {}): void {
 	// 6 карточка
 	maybeDrawCard(s);
 	if (isOver(s)) return;
-	// Соперник с репутацией 0 выбывает до дрейфа конца месяца (§6.6).
-	disbandZeroRepRivals(s);
+	// Соперник с репутацией 0 становится «на грани» до дрейфа конца месяца (§6.6, D-059).
+	checkRivalCollapse(s);
 	// 7 конец месяца
 	if (isMonthEnd(s.day)) monthEnd(s);
 	// 8 проверки
-	disbandZeroRepRivals(s);
+	checkRivalCollapse(s);
 	recomputeControl(s);
 	checkUnrestThresholds(s);
 	updateHoldCounters(s);

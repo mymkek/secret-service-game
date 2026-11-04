@@ -58,7 +58,8 @@ export interface RivalView {
 
 export function buildRivalView(s: GameState, id: RivalId): RivalView {
 	const r = s.rivals.find((x) => x.id === id)!;
-	const alive = s.rivals.filter((x) => x.alive);
+	// «На грани» (D-059) не входит в N_alive и не цель ATTACK_RIVAL.
+	const alive = s.rivals.filter((x) => x.alive && !x.collapsing);
 	const lastFail = s.counters.lastPlayerFailDay;
 	let maxNet = 0;
 	for (const n of Object.values(s.networks)) maxNet = Math.max(maxNet, n.level);

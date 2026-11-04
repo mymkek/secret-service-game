@@ -94,6 +94,8 @@ export const BALANCE = {
 	INVESTIGATION_FREEZE_MULT: 0.8,
 	/** шк. — §2.6, §8.6 */
 	INVESTIGATION_ARREST_THRESHOLD: 100,
+	/** шк./действие — §6.3 */
+	DIRTY_INVESTIGATION_PER_ACTION: 1,
 	/** дней — §2.5 */
 	KOMPROMAT_TTL_DAYS: 360,
 	/** шк. — §4.3, §8.5 */
@@ -109,6 +111,8 @@ export const BALANCE = {
 	SHARE_FLOOR: 0.05,
 	/** множ. — §6.2 */
 	PLAN_RATIO_CAP: 1.5,
+	/** кварт. — §6.2 */
+	PLAN_RATIO_SMOOTHING_QUARTERS: 2,
 	/** мес дохода — §6.2 */
 	CARRYOVER_CAP_MONTHS: 4,
 	/** доля — §6.2 */
@@ -117,6 +121,12 @@ export const BALANCE = {
 	HQ_UPKEEP: 150,
 	/** мес — §8.6 */
 	BANKRUPT_MONTHS: 3,
+	/** мес — §8.6 */
+	BANKRUPT_GRACE_MONTHS: 9,
+	/** мес дохода — §8.6 */
+	BANKRUPT_HARD_FLOOR_MONTHS: 3,
+	/** распределений — §8.6 */
+	DISBAND_GRACE_QUARTERS: 2,
 	/** мес дохода — §2.7 */
 	CREDIT_LIMIT_MONTHS: 1,
 	/** доля/мес — §2.7 */
@@ -666,9 +676,9 @@ export const BALANCE = {
 	/** разн. — §6.3 */
 	ACT_CONGRESS_WORK: {"cost":50,"influence":3,"cooldownDays":30},
 	/** разн. — §6.3 */
-	ACT_ABSORB: {"cost":1000,"influence":30,"days":30,"maxTargetRep":20,"minInfluence":60,"base":0.5,"perInfl":0.01,"perRep":0.01,"min":0.1,"max":0.9,"novices":3,"failInfluence":-15,"grudgeDays":180},
+	ACT_ABSORB: {"cost":1000,"influence":30,"days":30,"maxTargetRep":20,"minInfluence":60,"base":0.5,"perInfl":0.01,"perRep":0.01,"min":0.1,"max":0.9,"novices":3,"failInfluence":-15,"grudgeDays":180,"collapseMinInfluence":40,"collapseBonus":0.2},
 	/** разн. — §6.3 */
-	ACT_COUNTER_KOMPROMAT: {"investigationBase":-5,"investigationPerStrength":-5,"digBlockDays":90,"exposure":3},
+	ACT_COUNTER_KOMPROMAT: {"investigationBase":-5,"investigationPerStrength":-5,"digBlockDays":90,"exposure":3,"cooldownDays":90},
 	/** шк. — §6.3 */
 	ACT_SCAPEGOAT: {"investigation":-20,"exposure":-10},
 	/** разн. — §6.3 */

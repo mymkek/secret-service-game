@@ -58,6 +58,11 @@ export function rival(s: GameState, id: RivalId): Rival {
 	if (!r) throw new Error(`rival ${id} missing`);
 	return r;
 }
+/** Действующие соперники: живые и не «на грани» (D-059). Порядок police → cia → secret_service. */
+export function activeRivals(s: GameState): Rival[] {
+	return aliveRivals(s).filter((r) => !r.collapsing);
+}
+
 /** Живые соперники в фиксированном порядке police → cia → secret_service (§0). */
 export function aliveRivals(s: GameState): Rival[] {
 	return RIVAL_IDS.map((id) => rival(s, id)).filter((r) => r.alive);
@@ -119,7 +124,9 @@ export function addBudget(s: GameState, delta: number): void {
 	s.budget = Math.round(s.budget + delta);
 }
 
+/** Репутация соперника; у «на грани» она заморожена на 0 (D-059). */
 export function addRivalRep(r: Rival, delta: number): void {
+	if (r.collapsing) return;
 	r.reputation = applyReputationChange(r.reputation, delta);
 }
 export function addRivalInfluence(r: Rival, delta: number): void {
@@ -130,6 +137,8 @@ export function addRivalInfluence(r: Rival, delta: number): void {
 export function markDirty(s: GameState, n = 1): void {
 	s.counters.dirtyActions += n;
 	s.counters.dirtyThisMonth = true;
+	// §6.3, D-057: каждое грязное действие оставляет следы — «Под следствием» +DIRTY_INVESTIGATION_PER_ACTION × legal_inv_mult.
+	addInvestigation(s, B.DIRTY_INVESTIGATION_PER_ACTION * n);
 }
 
 // ------------------------------------------------------------ компромат

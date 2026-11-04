@@ -12,7 +12,7 @@ import type { AutopauseFlags, DeptKey, GameConfig, GameState, Jurisdiction, Netw
 import { RIVAL_IDS } from './types';
 
 /** Текущая версия схемы сохранения. Повышать при несовместимых изменениях GameState. */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export interface NewGameOptions {
 	seed: string;
@@ -47,9 +47,11 @@ export function createGame(opts: NewGameOptions): GameState {
 		id,
 		alive: true,
 		absorbed: false,
+		collapsing: false,
 		reputation: B.RIVAL_START[id].rep,
 		influence: B.RIVAL_START[id].infl,
 		planRatio: 1,
+		planRatioPrev: 1,
 		planBonusThisQuarter: 0,
 		kompromatOnPlayer: 0,
 		lobbyMult: 1,
@@ -123,7 +125,8 @@ export function createGame(opts: NewGameOptions): GameState {
 			ratioHistory: [],
 			criticalStreak: 0,
 			metCount: 0,
-			nextTargetMult: 1
+			nextTargetMult: 1,
+			planRatioPrev: 1
 		},
 		cards: { nextCardDay: 0, cooldowns: {}, active: [] },
 		quests: [],
@@ -142,6 +145,7 @@ export function createGame(opts: NewGameOptions): GameState {
 			unrest80Seen: false,
 			investigationAbove50: false,
 			prCampaignReadyDay: 0,
+			counterKompromatReadyDay: 0,
 			congressWorkReadyDay: 0,
 			informantReadyDay: 0,
 			informantCasesUntilDay: 0,
@@ -197,6 +201,19 @@ export const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record
 			// Без данных о моменте запуска — по текущему влиянию до оплаты не восстановить; берём текущее.
 			t.chance = t.kind === 'absorb' && target ? absorbChance(r.influence ?? 0, target.reputation ?? 0) : null;
 		}
+		return r;
+	},
+	// v3 → v4 (D-057, D-058, D-059): откат встречного компромата, сглаживание плана, статус «на грани».
+	// planRatioPrev = текущий planRatio: первое распределение после загрузки ведёт себя как без сглаживания.
+	3: (raw) => {
+		const r = raw as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+		r.counters = { ...(r.counters ?? {}), counterKompromatReadyDay: r.counters?.counterKompromatReadyDay ?? 0 };
+		for (const x of r.rivals ?? []) {
+			if (x.collapsing === undefined) x.collapsing = false;
+			if (x.planRatioPrev === undefined) x.planRatioPrev = x.planRatio ?? 1;
+		}
+		if (r.plan && r.plan.planRatioPrev === undefined) r.plan.planRatioPrev = r.plan.ratioHistory?.at?.(-1) ?? 1;
+		for (const t of r.tasks ?? []) if (t.disbandOnFail === undefined) t.disbandOnFail = false;
 		return r;
 	}
 };

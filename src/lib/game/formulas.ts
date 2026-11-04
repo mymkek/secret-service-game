@@ -474,10 +474,14 @@ export function sabotageRevealChance(nPrev: number): number {
 export function poachMoleChance(counterintel: number): number {
 	return clamp(B.ACT_POACH.moleBase - B.ACT_POACH.molePerCI * counterintel, B.ACT_POACH.moleMin, 1);
 }
-/** §6.3: шанс поглощения. */
-export function absorbChance(influence: number, targetRep: number): number {
+/** §6.3: шанс поглощения; цель «на грани» — +collapseBonus (D-059). */
+export function absorbChance(influence: number, targetRep: number, collapsing = false): number {
 	const a = B.ACT_ABSORB;
-	return clamp(a.base + a.perInfl * (influence - a.minInfluence) + a.perRep * (a.maxTargetRep - targetRep), a.min, a.max);
+	return clamp(
+		a.base + a.perInfl * (influence - a.minInfluence) + a.perRep * (a.maxTargetRep - targetRep) + (collapsing ? a.collapseBonus : 0),
+		a.min,
+		a.max
+	);
 }
 /** §6.3: шанс вернуть полномочия. */
 export function restoreStateChance(influence: number, highProfile180: number): number {

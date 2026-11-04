@@ -127,15 +127,18 @@ describe('поражения (§8.6)', () => {
 		expect(b.outcome.defeatReason).toBe('arrested');
 	});
 
-	it('bankrupt: бюджет < 0 три месяца подряд', () => {
+	it('bankrupt: бюджет < 0 три месяца подряд после грейса (D-060)', () => {
 		const s = fresh('bank');
-		s.budget = -100000;
-		for (let i = 0; i < 89; i++) stepDay(s);
+		s.day = B.BANKRUPT_GRACE_MONTHS * B.DAYS_PER_MONTH;
+		// Долг выше жёсткого порога (−BANKRUPT_HARD_FLOOR_MONTHS × доход), но не гасится за 3 месяца.
+		s.budget = -Math.round(0.9 * B.BANKRUPT_HARD_FLOOR_MONTHS * s.lastIncome);
+		const months = B.BANKRUPT_MONTHS * B.DAYS_PER_MONTH;
+		for (let i = 0; i < months - 1; i++) stepDay(s);
 		expect(s.outcome.status).toBe('active');
-		expect(s.counters.bankruptStreak).toBe(2);
+		expect(s.counters.bankruptStreak).toBe(B.BANKRUPT_MONTHS - 1);
 		stepDay(s);
 		expect(s.outcome.defeatReason).toBe('bankrupt');
-		expect(s.outcome.month).toBe(3);
+		expect(s.outcome.month).toBe(B.BANKRUPT_GRACE_MONTHS + B.BANKRUPT_MONTHS);
 	});
 
 	it('dismissed: план < 0.5 три квартала подряд (без расформирования)', () => {

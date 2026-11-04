@@ -198,7 +198,8 @@ describe('действия против конкурентов (§6.3)', () => {
 		s.investigation = 40;
 		const n = s.agents.length;
 		expect(applyAction(s, 'player', { type: 'scapegoat', agentId: s.agents[0].id }).ok).toBe(true);
-		expect(s.investigation).toBe(20);
+		// −20 от козла отпущения, затем +DIRTY_INVESTIGATION_PER_ACTION (грязное действие, D-057; Юр 0).
+		expect(s.investigation).toBeCloseTo(40 + B.ACT_SCAPEGOAT.investigation + B.DIRTY_INVESTIGATION_PER_ACTION);
 		expect(s.agents).toHaveLength(n - 1);
 	});
 });
