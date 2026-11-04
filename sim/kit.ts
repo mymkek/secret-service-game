@@ -373,11 +373,19 @@ export function rivalKompromat(s: GameState, id?: string) {
 	);
 }
 
-/** Встречный компромат, если «Под следствием» высоко. */
+/**
+ * Защита от следствия. D-057: у встречного компромата откат 90 дней — тратим его раньше (порог threshold),
+ * а при критическом уровне (≥ 80) жертвуем «козлом отпущения» (самый слабый свободный агент).
+ */
 export function defendInvestigation(s: GameState, threshold: number): void {
-	while (s.investigation >= threshold) {
+	const t = Math.min(threshold, 25);
+	if (s.investigation >= t) {
 		const k = rivalKompromat(s).sort((a, b) => b.strength - a.strength)[0];
-		if (!k || !act(s, { type: 'counterKompromat', kompromatId: k.id })) break;
+		if (k) act(s, { type: 'counterKompromat', kompromatId: k.id });
+	}
+	if (s.investigation >= 80 && s.agents.length > 6) {
+		const v = s.agents.filter((a) => a.status === 'idle').sort((x, y) => x.level - y.level || x.id - y.id)[0];
+		if (v) act(s, { type: 'scapegoat', agentId: v.id });
 	}
 }
 

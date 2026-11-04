@@ -1,5 +1,16 @@
 // Агрегация записей партий: исходы, месяцы, срезы бюджета, счётчики событий, кривые p10/p50/p90.
+import { BALANCE as B } from '../src/lib/game/index';
 import { CURVE_KEYS, type CurveKey, type GameRecord } from './game';
+
+/**
+ * D-064: «катастрофа от следствия» — arrested, либо bankrupt, при котором в момент банкротства
+ * «Под следствием» ≥ INVESTIGATION_FREEZE_THRESHOLD (доход был заморожен).
+ */
+export function investigationCatastrophe(r: GameRecord): boolean {
+	if (r.result === 'loss:arrested') return true;
+	const inv = (r.final.investigationExact ?? r.final.investigation) as number;
+	return r.result === 'loss:bankrupt' && inv >= B.INVESTIGATION_FREEZE_THRESHOLD;
+}
 
 export const RESULTS = [
 	'win:1984',
@@ -42,6 +53,8 @@ export interface BotSummary {
 	firstsMedian: Record<string, { p50: number; reached: number }>;
 	scoreMean: number;
 	scoreSd: number;
+	/** D-064: доля партий с катастрофой от следствия и её состав. */
+	invCatastrophe: { rate: number; arrested: number; bankruptFrozen: number };
 	curves?: Record<CurveKey, { p10: number[]; p50: number[]; p90: number[]; n: number[] }>;
 }
 
@@ -113,7 +126,10 @@ export function summarize(bot: string, recs: GameRecord[]): BotSummary {
 			curves[k] = { p10, p50, p90, n: nn };
 		}
 	}
-	return { bot, n, results, winRate: wins.length / n, months, snaps, budgetPositive, countsMean, countsAny, finalMedian, firstsMedian, scoreMean: sm, scoreSd: sd, curves };
+	const arrested = recs.filter((r) => r.result === 'loss:arrested').length;
+	const invCat = recs.filter(investigationCatastrophe).length;
+	const invCatastrophe = { rate: invCat / n, arrested: arrested / n, bankruptFrozen: (invCat - arrested) / n };
+	return { bot, n, results, winRate: wins.length / n, months, snaps, budgetPositive, countsMean, countsAny, finalMedian, firstsMedian, scoreMean: sm, scoreSd: sd, invCatastrophe, curves };
 }
 
 const pct = (x: number) => (Number.isFinite(x) ? (100 * x).toFixed(1) : '—');
@@ -133,6 +149,10 @@ export function markdown(title: string, meta: Record<string, unknown>, sums: Bot
 			`| ${s.bot} | ${s.n} | ${cols.map((c) => pct((s.results[c] ?? 0) / s.n)).join(' | ')} | ${pct(s.winRate)} | ${num(w.p10)}/${num(w.p50)}/${num(w.p90)} |`
 		);
 	}
+	L.push('', '## Катастрофа от следствия (D-064), % партий', '');
+	L.push('Arrested плюс bankrupt при «Под следствием» ≥ ' + B.INVESTIGATION_FREEZE_THRESHOLD + ' в момент банкротства. Цель: честные < 10 %, грязные 10–25 %.', '');
+	L.push('| бот | всего | arrested | bankrupt под заморозкой |', '|---|---|---|---|');
+	for (const s of sums) L.push(`| ${s.bot} | ${pct(s.invCatastrophe.rate)} | ${pct(s.invCatastrophe.arrested)} | ${pct(s.invCatastrophe.bankruptFrozen)} |`);
 	L.push('', '## Месяц исхода (p10/p50/p90) по типу исхода', '');
 	for (const s of sums) {
 		L.push(`- **${s.bot}**: ` + Object.entries(s.months).filter(([k]) => k !== 'win:any').map(([k, v]) => `${k} ${num(v.p10)}/${num(v.p50)}/${num(v.p90)}`).join('; '));

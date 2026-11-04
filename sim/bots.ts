@@ -337,7 +337,13 @@ const monopoly: BotDef = {
 				if (!c) break;
 				ops.add(c.id);
 			}
-			const alive = s.rivals.filter((r) => r.alive);
+			// D-059: соперник «на грани» (репутация 0) — льготное поглощение при влиянии ≥ collapseMinInfluence.
+			const A = B.ACT_ABSORB as typeof B.ACT_ABSORB & { collapseMinInfluence?: number; collapseCost?: number };
+			for (const r of s.rivals) {
+				const rr = r as typeof r & { collapsing?: boolean };
+				if (r.alive && rr.collapsing && s.influence >= (A.collapseMinInfluence ?? A.minInfluence) && s.budget >= (A.collapseCost ?? A.cost) + 100) act(s, { type: 'absorb', rivalId: r.id });
+			}
+			const alive = s.rivals.filter((r) => r.alive && !(r as typeof r & { collapsing?: boolean }).collapsing);
 			const w = (r: (typeof alive)[number]) => (0.5 + Math.min(1.5, r.planRatio)) * (0.5 + r.reputation / 100) * (0.5 + r.influence / 100) * (r.id === 'secret_service' ? 1.1 : 1);
 			const target = [...alive].sort((a, b) => w(a) - w(b))[0];
 			const left = dayOfQuarterLeft(s);
@@ -376,7 +382,8 @@ const monopoly: BotDef = {
 						act(s, { type: 'leak', kompromatId: k.id });
 					}
 					// Лобби по цели, пока хватает влияния (оставляем запас на поглощение, если оно близко).
-					const keep = target.reputation < B.ACT_ABSORB.maxTargetRep + 5 && s.influence >= B.ACT_ABSORB.minInfluence ? B.ACT_ABSORB.minInfluence + 15 : 15;
+					// Держим влияние на льготное поглощение цели, которую вот-вот доведём до 0 (D-059).
+					const keep = target.reputation < 30 ? Math.max(15, ((B.ACT_ABSORB as { collapseMinInfluence?: number }).collapseMinInfluence ?? B.ACT_ABSORB.minInfluence) + 5) : 15;
 					while (s.influence - B.ACT_LOBBY.influence >= keep && target.lobbyMult > B.ACT_LOBBY.multMin + 1e-9) {
 						if (!act(s, { type: 'lobby', rivalId: tid })) break;
 					}

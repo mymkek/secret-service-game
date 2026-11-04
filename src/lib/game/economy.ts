@@ -149,9 +149,14 @@ export function monthEndMoney(s: GameState): boolean {
 		}
 		if (s.counters.bankruptStreak >= B.BANKRUPT_MONTHS) defeat(s, 'bankrupt');
 		// Жёсткий порог долга — в любой месяц, без грейса.
-		else if (s.budget < -B.BANKRUPT_HARD_FLOOR_MONTHS * s.lastIncome) defeat(s, 'bankrupt');
+		else if (s.budget < bankruptHardFloor(s)) defeat(s, 'bankrupt');
 	} else s.counters.bankruptStreak = 0;
 	return paid;
+}
+
+/** §8.6, D-063: жёсткий порог долга = −BANKRUPT_HARD_FLOOR_MONTHS × max(lastIncome, firstIncome). */
+export function bankruptHardFloor(s: GameState): number {
+	return -B.BANKRUPT_HARD_FLOOR_MONTHS * Math.max(s.lastIncome, s.firstIncome);
 }
 
 // ------------------------------------------------------------ план (§5.5)

@@ -12,7 +12,7 @@ import type { AutopauseFlags, DeptKey, GameConfig, GameState, Jurisdiction, Netw
 import { RIVAL_IDS } from './types';
 
 /** Текущая версия схемы сохранения. Повышать при несовместимых изменениях GameState. */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export interface NewGameOptions {
 	seed: string;
@@ -86,6 +86,7 @@ export function createGame(opts: NewGameOptions): GameState {
 		unrest: B.START_UNREST,
 		share: 0,
 		lastIncome: 0,
+		firstIncome: 0,
 		hearingMult: 1,
 		priorityMult: 1,
 		departments: { ...(B.START_DEPARTMENTS as Record<DeptKey, number>) },
@@ -171,6 +172,7 @@ export function createGame(opts: NewGameOptions): GameState {
 	distribute(s, 1);
 	// D-051: до первого дохода база кредита — доход месяца 1.
 	s.lastIncome = incomeForMonth(s, 1);
+	s.firstIncome = s.lastIncome;
 	s.cards.nextCardDay = randInt(s, B.CARD_INTERVAL_MIN_DAYS, B.CARD_INTERVAL_MAX_DAYS);
 	recomputeControl(s);
 	return s;
@@ -214,6 +216,13 @@ export const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record
 		}
 		if (r.plan && r.plan.planRatioPrev === undefined) r.plan.planRatioPrev = r.plan.ratioHistory?.at?.(-1) ?? 1;
 		for (const t of r.tasks ?? []) if (t.disbandOnFail === undefined) t.disbandOnFail = false;
+		return r;
+	},
+	// v4 → v5 (D-063): firstIncome — доход месяца 1. Он детерминирован зерном и config, поэтому
+	// пересчитываем его новой партией с тем же seed/config (без влияния на RNG загружаемого сейва).
+	4: (raw) => {
+		const r = raw as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+		if (typeof r.firstIncome !== 'number') r.firstIncome = createGame({ seed: String(r.seed), config: r.config ?? {} }).firstIncome;
 		return r;
 	}
 };

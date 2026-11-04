@@ -99,7 +99,7 @@ export const BALANCE = {
 	/** дней — §2.5 */
 	KOMPROMAT_TTL_DAYS: 360,
 	/** шк. — §4.3, §8.5 */
-	ILLEGAL_TARGET_EXPOSURE: 10,
+	ILLEGAL_TARGET_EXPOSURE: 12,
 	/** шк./мес/ур — §2.4 */
 	NET_INFLUENCE_PER_LEVEL: 0.2,
 	// A.4 Экономика
@@ -124,7 +124,7 @@ export const BALANCE = {
 	/** мес — §8.6 */
 	BANKRUPT_GRACE_MONTHS: 9,
 	/** мес дохода — §8.6 */
-	BANKRUPT_HARD_FLOOR_MONTHS: 3,
+	BANKRUPT_HARD_FLOOR_MONTHS: 6,
 	/** распределений — §8.6 */
 	DISBAND_GRACE_QUARTERS: 2,
 	/** мес дохода — §2.7 */
@@ -678,7 +678,7 @@ export const BALANCE = {
 	/** разн. — §6.3 */
 	ACT_CONGRESS_WORK: {"cost":50,"influence":3,"cooldownDays":30},
 	/** разн. — §6.3 */
-	ACT_ABSORB: {"cost":1000,"influence":30,"days":30,"maxTargetRep":20,"minInfluence":60,"base":0.5,"perInfl":0.01,"perRep":0.01,"min":0.1,"max":0.9,"novices":3,"failInfluence":-15,"grudgeDays":180,"collapseMinInfluence":40,"collapseBonus":0.2},
+	ACT_ABSORB: {"cost":1000,"influence":30,"days":30,"maxTargetRep":20,"minInfluence":60,"base":0.5,"perInfl":0.01,"perRep":0.01,"min":0.1,"max":0.9,"novices":3,"failInfluence":-15,"grudgeDays":180,"collapseMinInfluence":30,"collapseBonus":0.2,"collapseCost":600},
 	/** разн. — §6.3 */
 	ACT_COUNTER_KOMPROMAT: {"investigationBase":-5,"investigationPerStrength":-5,"digBlockDays":90,"exposure":3,"cooldownDays":90},
 	/** шк. — §6.3 */

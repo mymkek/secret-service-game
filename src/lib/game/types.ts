@@ -494,6 +494,8 @@ export interface GameState {
 	share: number;
 	/** Доход последнего месяца (до первого дохода — доход месяца 1); база лимита кредита (D-051). */
 	lastIncome: number;
+	/** Доход месяца 1, фиксируется на старте; пол жёсткого порога долга (D-063). */
+	firstIncome: number;
 	hearingMult: number;
 	priorityMult: number;
 

@@ -225,6 +225,8 @@ export function playGame(botName: string, seed: string, o: PlayOpts = {}): GameR
 			influence: +s.influence.toFixed(1),
 			exposure: +s.exposure.toFixed(1),
 			investigation: +s.investigation.toFixed(1),
+			/** Точное значение в момент конца партии (для D-064: банкротство при «Под следствием» ≥ порога заморозки). */
+			investigationExact: s.investigation,
 			unrest: +s.unrest.toFixed(1),
 			control: +s.control.toFixed(1),
 			share: +s.share.toFixed(4),

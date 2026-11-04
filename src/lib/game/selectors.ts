@@ -3,7 +3,7 @@ import { BALANCE as B } from './balance';
 import { agentSalary, currentAgentCap, jurisdictionPoints } from './agents';
 import { creditLimit, opCost, survRequiredByRepression, validateAction } from './actions';
 import { canBuildDept, canBuildRepr, canBuildSurv, canResearch } from './development';
-import { incomeForMonth, monthlyExpenses, type ExpenseBreakdown } from './economy';
+import { bankruptHardFloor, incomeForMonth, monthlyExpenses, type ExpenseBreakdown } from './economy';
 import { agentById, dept, dirtyCostMult, kompromatActive, month } from './effects';
 import {
 	absorbChance,
@@ -345,7 +345,8 @@ export function selectActionCosts(s: GameState): ActionCosts {
 			lobby: view(B.ACT_LOBBY.cost, B.ACT_LOBBY.influence, 0, null, B.ACT_LOBBY.backfireChance, validateAction(s, { type: 'lobby', rivalId: r.id })),
 			poach: view(B.ACT_POACH.cost, 0, 0, null, poachMoleChance(ci), validateAction(s, { type: 'poach', rivalId: r.id })),
 			absorb: view(
-				B.ACT_ABSORB.cost,
+				// D-065: «на грани» — collapseCost.
+				r.collapsing ? B.ACT_ABSORB.collapseCost : B.ACT_ABSORB.cost,
 				B.ACT_ABSORB.influence,
 				absorbTask ? absorbTask.doneDay - s.day : 0,
 				// D-052: шанс считается при запуске по влиянию до оплаты; во время выполнения — зафиксированный.
@@ -475,7 +476,7 @@ export interface CreditView {
 	bankruptMonths: number;
 	/** D-060: сколько ближайших концов месяца ещё не идут в счётчик банкротства (0 — грейс кончился). */
 	bankruptGraceMonthsLeft: number;
-	/** D-060: бюджет ниже этого значения в конце месяца — банкротство сразу (−BANKRUPT_HARD_FLOOR_MONTHS × lastIncome). */
+	/** D-060, D-063: бюджет ниже этого значения в конце месяца — банкротство сразу (−BANKRUPT_HARD_FLOOR_MONTHS × max(lastIncome, firstIncome)). */
 	hardFloor: number;
 	/** D-060: сколько ближайших распределений не идут в счётчик расформирования. */
 	disbandGraceQuartersLeft: number;
@@ -494,7 +495,7 @@ export function selectCredit(s: GameState): CreditView {
 		bankruptStreak: s.counters.bankruptStreak,
 		bankruptMonths: B.BANKRUPT_MONTHS,
 		bankruptGraceMonthsLeft: Math.max(0, B.BANKRUPT_GRACE_MONTHS - nextMonthEndMonth(s) + 1),
-		hardFloor: -B.BANKRUPT_HARD_FLOOR_MONTHS * s.lastIncome,
+		hardFloor: bankruptHardFloor(s),
 		disbandGraceQuartersLeft: Math.max(0, B.DISBAND_GRACE_QUARTERS - s.plan.quarter + 1)
 	};
 }

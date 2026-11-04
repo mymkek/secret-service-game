@@ -40,7 +40,7 @@ const loaded = deserialize(json);                  // с миграцией sche
 | `setPaused(s, bool)` | Пауза. При снятии паузы очищается `s.pauseReasons` |
 | `setSpeed(s, 1\|2\|3)` | Скорость. Влияет только на `realtimeToDays` |
 | `realtimeToDays(speed, elapsedMs, carryMs)` | Переводит мс в целые дни по `DAY_MS_BY_SPEED`, возвращает остаток |
-| `serialize(s)` / `deserialize(json)` | JSON для `saves.state_json`. `SCHEMA_VERSION` (сейчас 4) и `MIGRATIONS` лежат в `state.ts`; сейвы v1–v3 мигрируют автоматически |
+| `serialize(s)` / `deserialize(json)` | JSON для `saves.state_json`. `SCHEMA_VERSION` (сейчас 5) и `MIGRATIONS` лежат в `state.ts`; сейвы v1–v4 мигрируют автоматически |
 | `cloneState(s)` | Глубокая копия |
 
 **Автопауза** (§3.4). Флаги лежат в `s.autopause` (по умолчанию `AUTOPAUSE_DEFAULTS`), их можно менять напрямую из настроек. Причины текущей паузы — в `s.pauseReasons` (ключи `AutopauseKey`).
@@ -75,7 +75,7 @@ const loaded = deserialize(json);                  // с миграцией sche
 |---|---|
 | `selectDate(s)` | дата, месяц, квартал, пауза, скорость |
 | `selectResources(s)` | верхняя панель: шкалы (`Math.floor`), бюджет, `creditLimit`, `debt`, компромат, лимит агентов, доля, шанс скандала, план |
-| `selectCredit(s): CreditView` | кредит на операции: `limit`, `debt`, `availableForOps`, `interestRate`, `nextInterest`, `bankruptStreak`, `bankruptMonths`; грейс (D-060): `bankruptGraceMonthsLeft`, `disbandGraceQuartersLeft`, `hardFloor` |
+| `selectCredit(s): CreditView` | кредит на операции: `limit`, `debt`, `availableForOps`, `interestRate`, `nextInterest`, `bankruptStreak`, `bankruptMonths`; грейс (D-060): `bankruptGraceMonthsLeft`, `disbandGraceQuartersLeft`, `hardFloor` = −BANKRUPT_HARD_FLOOR_MONTHS × max(lastIncome, firstIncome) (D-063) |
 | `selectSurvRollbackFloor(s)` | ниже какого уровня слежку откатить нельзя из-за активных репрессий (D-054) |
 | `selectForecast(s)` | доход и расходы ближайшего конца месяца |
 | `selectAgents(s)`, `selectHirePool(s)`, `resolveAgentName(agent, names)` | персонал (крот скрыт) |

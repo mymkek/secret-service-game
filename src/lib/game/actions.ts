@@ -507,11 +507,13 @@ function handlePlayer(s: GameState, a: PlayerAction, dry: boolean): string | nul
 				if (s.influence < A.minInfluence) return 'no_influence';
 			}
 			if (s.tasks.some((t) => t.kind === 'absorb' && t.rivalId === r.id)) return 'already_running';
-			const e = needMoney(s, A.cost) ?? needInfluence(s, A.influence);
+			// D-065: цель «на грани» стоит collapseCost.
+			const absorbCost = r.collapsing ? A.collapseCost : A.cost;
+			const e = needMoney(s, absorbCost) ?? needInfluence(s, A.influence);
 			if (e || dry) return e;
 			// D-052: шанс фиксируется при запуске — по влиянию ДО оплаты и репутации цели сейчас (+collapseBonus «на грани»).
 			const chance = absorbChance(s.influence, r.reputation, r.collapsing);
-			addBudget(s, -A.cost);
+			addBudget(s, -absorbCost);
 			addInfluence(s, -A.influence);
 			s.tasks.push({ id: newId(s), kind: 'absorb', doneDay: s.day + A.days, rivalId: r.id, questSessionId: null, chance, disbandOnFail: false });
 			return null;
