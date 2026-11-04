@@ -31,6 +31,9 @@
 	/** Выбранный агент/компромат по ключу выбора (index Ink или id ядра в запасном режиме). */
 	let sel = $state<Record<string, string>>({});
 
+	// Решение принимается на паузе, в том числе когда окно открыто заново кнопкой «Решения».
+	$effect(() => untrack(() => game.pause()));
+
 	const labels = $derived({ ...content.quests.find((q) => q.questId === quest.questId)?.choiceLabels });
 
 	function snapshot() {

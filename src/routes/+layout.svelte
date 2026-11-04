@@ -31,10 +31,17 @@
 
 	const pending = $derived(game.s ? selectQuests(game.s).filter((q) => q.waitUntilDay === null && q.choices.length > 0).length : 0);
 
+	// Пока открыта вкладка «Операции», новые дела сразу считаются просмотренными.
+	$effect(() => {
+		if (page.url.pathname.startsWith('/ops')) game.markCasesSeen();
+	});
+
 	function onkeydown(e: KeyboardEvent) {
 		if (e.code !== 'Space' || !game.s) return;
 		const t = e.target as HTMLElement | null;
 		if (t && t.closest('input, textarea, select, button, a, [role="button"], [role="dialog"]')) return;
+		// Пока открыто окно, пробел не снимает паузу «из-под» него.
+		if (document.querySelector('[aria-modal="true"]')) return;
 		e.preventDefault();
 		game.togglePause();
 	}
@@ -68,7 +75,12 @@
 				<a
 					href={n.href}
 					aria-current={active ? 'page' : undefined}
-					class="rounded-md px-3 py-1 text-sm hover:text-gold {active ? 'bg-gold/15 text-gold' : 'text-muted'}">{n.label}</a
+					class="relative rounded-md px-3 py-1 text-sm hover:text-gold {active ? 'bg-gold/15 text-gold' : 'text-muted'}"
+					>{n.label}{#if n.href === '/ops' && game.newCases > 0}<span
+							class="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] leading-none font-bold text-white"
+							title="Новых дел: {game.newCases}"
+							aria-label="новых дел: {game.newCases}">{game.newCases}</span
+						>{/if}</a
 				>
 			{/each}
 		</nav>

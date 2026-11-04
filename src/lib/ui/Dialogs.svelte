@@ -17,7 +17,8 @@
 
 	function continueGame() {
 		game.closePopup();
-		if (game.s?.paused && game.popups.length === 0) game.togglePause();
+		// За окном может ждать квест (например, слушания по карточке) — тогда пауза остаётся.
+		if (game.s?.paused && game.popups.length === 0 && !openQuest) game.togglePause();
 	}
 
 	const num = (v: unknown, d = 2) => (typeof v === 'number' ? (Math.round(v * 10 ** d) / 10 ** d).toString() : '—');

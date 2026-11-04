@@ -57,6 +57,8 @@ class GameStore {
 	private _last = 0;
 	private _carry = 0;
 	private _toastId = 0;
+	/** Дела, которые игрок уже видел на вкладке «Операции» (для значка новых дел). */
+	private _seenCases = new Set<number>();
 
 	/** Состояние; чтение подписывает $derived/$effect на счётчик версии. */
 	get s(): GameState | null {
@@ -80,6 +82,8 @@ class GameStore {
 		this.popups = [];
 		this.questResult = null;
 		this.dismissedQuests = [];
+		// Дела, что уже лежат в начатой или загруженной партии, новыми не считаем.
+		this._seenCases = new Set(this._state?.cases.map((c) => c.id) ?? []);
 		this._carry = 0;
 		this.bump();
 	}
@@ -182,6 +186,19 @@ class GameStore {
 
 	dismissQuest(id: number): void {
 		if (!this.dismissedQuests.includes(id)) this.dismissedQuests.push(id);
+	}
+
+	/** Сколько открытых дел игрок ещё не видел на вкладке «Операции». */
+	get newCases(): number {
+		return this.s?.cases.filter((c) => !this._seenCases.has(c.id)).length ?? 0;
+	}
+
+	/** Отметить все текущие дела просмотренными (вызывается, пока открыта вкладка «Операции»). */
+	markCasesSeen(): void {
+		const fresh = this.s?.cases.filter((c) => !this._seenCases.has(c.id)) ?? [];
+		if (fresh.length === 0) return;
+		for (const c of fresh) this._seenCases.add(c.id);
+		this.bump();
 	}
 
 	// ----------------------------------------------------------------- имена и тексты
