@@ -1,12 +1,25 @@
+/* Шрифты: самохостинг через @fontsource (кириллица + латиница). Tinos — «протокольный», Cousine — интерфейс. */
+@import '@fontsource/tinos/latin-400.css';
+@import '@fontsource/tinos/cyrillic-400.css';
+@import '@fontsource/tinos/latin-700.css';
+@import '@fontsource/tinos/cyrillic-700.css';
+@import '@fontsource/tinos/latin-400-italic.css';
+@import '@fontsource/tinos/cyrillic-400-italic.css';
+@import '@fontsource/cousine/latin-400.css';
+@import '@fontsource/cousine/cyrillic-400.css';
+@import '@fontsource/cousine/latin-700.css';
+@import '@fontsource/cousine/cyrillic-700.css';
 @import 'tailwindcss';
 
 @theme {
-	--color-bg: #0a1628;
-	--color-panel: #12233f;
-	--color-line: #1f3a63;
-	--color-ink: #e6edf7;
-	--color-muted: #8fa3bf;
+	/* --- Цвета (имена старые, значения темнее; расширено уровнями поверхностей) --- */
+	--color-bg: #070d1b;
+	--color-panel: #111e38;
+	--color-line: #263f68;
+	--color-ink: #e8eef8;
+	--color-muted: #94a8c5;
 	--color-gold: #c9a227;
+	--color-gold-bright: #e6c457;
 	--color-ok: #3fb68b;
 	--color-warn: #e8a23a;
 	--color-danger: #e05252;
@@ -15,6 +28,83 @@
 	--color-police: #4fa3e0;
 	--color-usss: #2a9d8f;
 	--color-mossad: #5c7cfa;
+	--color-violet: #7c5cf0;
+	--color-coral: #f0675c;
+	--color-cyan: #38c4e6;
+	/* Поверхности: 1 — утопленные/вложенные блоки, 2 — карточки, 3 — приподнятые элементы. */
+	--color-surface-1: #0b1427;
+	--color-surface-2: #111e38;
+	--color-surface-3: #1a2c4f;
+
+	/* --- Шрифты --- */
+	--font-protocol: 'Tinos', 'Times New Roman', Times, serif;
+	--font-ui: 'Cousine', 'Courier New', ui-monospace, monospace;
+	--font-sans: 'Cousine', 'Courier New', ui-monospace, monospace;
+	--font-serif: 'Tinos', 'Times New Roman', Times, serif;
+
+	/* --- Шкала текста: примерно на ступень крупнее стандартной --- */
+	--text-xs: 0.8125rem;
+	--text-xs--line-height: 1.25;
+	--text-sm: 0.9375rem;
+	--text-sm--line-height: 1.4;
+	--text-base: 1.0625rem;
+	--text-base--line-height: 1.5;
+	--text-lg: 1.25rem;
+	--text-lg--line-height: 1.4;
+	--text-xl: 1.5rem;
+	--text-xl--line-height: 1.3;
+	--text-2xl: 1.75rem;
+	--text-2xl--line-height: 1.25;
+	--text-3xl: 2.25rem;
+	--text-3xl--line-height: 1.15;
+
+	/* --- Радиусы --- */
+	--radius-btn: 0.875rem;
+	--radius-field: 0.75rem;
+	--radius-card: 1.375rem;
+	--radius-modal: 1.75rem;
+
+	/* --- Тени (elevation) --- */
+	--shadow-elev-1: 0 2px 6px rgb(0 0 0 / 0.35), inset 0 1px 0 rgb(255 255 255 / 0.04);
+	--shadow-elev-2: 0 12px 28px -8px rgb(0 0 0 / 0.6), 0 2px 6px rgb(0 0 0 / 0.3), inset 0 1px 0 rgb(255 255 255 / 0.05);
+	--shadow-elev-3: 0 28px 64px -12px rgb(0 0 0 / 0.75), 0 6px 16px rgb(0 0 0 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+:root {
+	/* Акцентные градиенты для плиток и значков. */
+	--grad-gold: linear-gradient(135deg, #e6c457 0%, #c9a227 55%, #a9801a 100%);
+	--grad-blue: linear-gradient(135deg, #2f6fd6 0%, #38c4e6 100%);
+	--grad-violet: linear-gradient(135deg, #5a45d6 0%, #9a6cf5 100%);
+	--grad-coral: linear-gradient(135deg, #e0524f 0%, #f4954a 100%);
+	--grad-green: linear-gradient(135deg, #2a9d8f 0%, #4fd1a1 100%);
+	--grad-amber: linear-gradient(135deg, #d98a22 0%, #f2c14e 100%);
+	--grad-slate: linear-gradient(135deg, #2a3f66 0%, #3d5a8c 100%);
+}
+
+@utility bg-grad-gold {
+	background-image: var(--grad-gold);
+}
+@utility bg-grad-blue {
+	background-image: var(--grad-blue);
+}
+@utility bg-grad-violet {
+	background-image: var(--grad-violet);
+}
+@utility bg-grad-coral {
+	background-image: var(--grad-coral);
+}
+@utility bg-grad-green {
+	background-image: var(--grad-green);
+}
+@utility bg-grad-amber {
+	background-image: var(--grad-amber);
+}
+@utility bg-grad-slate {
+	background-image: var(--grad-slate);
+}
+
+html {
+	font-size: 16px;
 }
 
 html,
@@ -25,7 +115,18 @@ body {
 }
 
 body {
-	font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	font-family: var(--font-ui);
+	font-size: var(--text-base);
+	background-image: radial-gradient(1200px 600px at 50% -10%, #14264a 0%, transparent 70%);
+	background-attachment: fixed;
+	overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+h4 {
+	font-family: var(--font-protocol);
 }
 
 :focus-visible {
@@ -33,24 +134,69 @@ body {
 	outline-offset: 2px;
 }
 
+@layer base {
+	select,
+	input:not([type='checkbox']):not([type='radio']),
+	textarea {
+		border-radius: var(--radius-field);
+		border: 1px solid rgb(255 255 255 / 0.08);
+		background-color: var(--color-surface-1);
+		color: var(--color-ink);
+		padding: 0.5rem 0.75rem;
+		font-size: var(--text-sm);
+		box-shadow: inset 0 2px 4px rgb(0 0 0 / 0.35);
+	}
+	select:focus,
+	input:focus,
+	textarea:focus {
+		border-color: var(--color-gold);
+		outline: none;
+		box-shadow: 0 0 0 3px rgb(201 162 39 / 0.25);
+	}
+	input[type='checkbox'] {
+		width: 1.1rem;
+		height: 1.1rem;
+		cursor: pointer;
+	}
+	::placeholder {
+		color: var(--color-muted);
+		opacity: 0.7;
+	}
+}
+
 @layer components {
 	.card {
-		@apply rounded-lg border border-line bg-panel p-3;
+		@apply rounded-card border border-white/[0.06] bg-surface-2 p-4 shadow-elev-2;
+	}
+	.card-1 {
+		@apply rounded-2xl border border-white/[0.04] bg-surface-1 p-3 shadow-[inset_0_2px_6px_rgb(0_0_0/0.35)];
+	}
+	.card-3 {
+		@apply rounded-card border border-white/10 bg-surface-3 p-4 shadow-elev-3;
 	}
 	.btn {
-		@apply inline-flex cursor-pointer items-center justify-center gap-1 rounded-md border border-line bg-bg px-3 py-1.5 text-sm text-ink transition-colors hover:border-gold hover:text-gold disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-line disabled:hover:text-ink;
+		@apply inline-flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-btn border border-white/10 bg-surface-3 px-4 py-2 text-sm text-ink shadow-elev-1 transition-all hover:border-gold/70 hover:text-gold-bright active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-white/10 disabled:hover:text-ink;
 	}
 	.btn-gold {
-		@apply border-gold bg-gold/15 text-gold hover:bg-gold/30;
+		@apply border-gold-bright/60 bg-grad-gold font-bold text-[#1b1405] hover:border-gold-bright hover:text-[#1b1405] hover:brightness-110 disabled:hover:text-[#1b1405];
 	}
 	.btn-danger {
-		@apply border-danger/60 text-danger hover:border-danger hover:text-danger;
+		@apply border-danger/60 bg-danger/10 text-danger hover:border-danger hover:text-danger hover:bg-danger/20;
+	}
+	.btn-ghost {
+		@apply border-transparent bg-transparent shadow-none hover:bg-white/5;
+	}
+	.btn-sm {
+		@apply min-h-8 rounded-xl px-3 py-1 text-xs;
+	}
+	.btn-lg {
+		@apply min-h-12 px-6 py-3 text-base;
 	}
 	.h2 {
-		@apply mb-2 text-xs font-semibold tracking-wider text-muted uppercase;
+		@apply mb-3 font-ui text-sm font-bold tracking-wider text-muted uppercase;
 	}
 	.chip {
-		@apply inline-block rounded border border-line px-1.5 py-0.5 text-xs text-muted;
+		@apply inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-xs text-muted;
 	}
 }
 

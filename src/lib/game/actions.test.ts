@@ -56,7 +56,7 @@ describe('найм и персонал', () => {
 });
 
 describe('операции (§5)', () => {
-	it('шанс до старта совпадает с примером ГДД (0.52)', () => {
+	it('шанс до старта совпадает с примером ГДД (D-066: один 0.53, с новичком 0.59)', () => {
 		const s = createGame({ seed: 'ex' });
 		const [exp, nov] = [s.agents.find((a) => a.rank === 'experienced')!, s.agents.find((a) => a.rank === 'novice')!];
 		exp.skills = { surveillance: 5, combat: 5, interrogation: 5, hacking: 5 };
@@ -64,8 +64,9 @@ describe('операции (§5)', () => {
 		nov.skills = { surveillance: 2, combat: 2, interrogation: 2, hacking: 2 };
 		nov.level = 1;
 		const c = caseIn(s, 'CA', 'regular', 3);
+		expect(previewOperation(s, { opType: 'investigation', caseId: c.id, agentIds: [exp.id] }).chance).toBeCloseTo(0.53, 10);
 		const p = previewOperation(s, { opType: 'investigation', caseId: c.id, agentIds: [exp.id, nov.id] });
-		expect(p.chance).toBeCloseTo(0.52, 10);
+		expect(p.chance).toBeCloseTo(0.59, 10);
 		expect(p.cost).toBe(30);
 		expect(p.days).toBe(30);
 		expect(p.error).toBeNull();
@@ -99,7 +100,7 @@ describe('операции (§5)', () => {
 	it('отмена возвращает 50 % цены', () => {
 		const s = rich('cancel');
 		const c = caseIn(s, 'TX', 'terror', 3);
-		const ids = s.agents.slice(0, 4).map((a) => a.id);
+		const ids = s.agents.slice(0, 3).map((a) => a.id);
 		const b0 = s.budget;
 		expect(applyAction(s, 'player', { type: 'startOp', opType: 'terror', caseId: c.id, agentIds: ids }).ok).toBe(true);
 		const opId = s.operations[0].id;

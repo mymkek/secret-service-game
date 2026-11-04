@@ -9,7 +9,9 @@ import {
 	opDept,
 	opPrimarySkills,
 	opReward,
-	opSuccessChance,
+	opRollChance,
+	opShownChance,
+	reinforceBonus,
 	surveillanceKompromatStrength,
 	terrorDeathChance
 } from './formulas';
@@ -21,6 +23,7 @@ import {
 	addKompromat,
 	addKompromatOnPlayer,
 	addReputation,
+	addRivalRep,
 	agentById,
 	aliveRivals,
 	autopause,
@@ -38,7 +41,23 @@ import { triggerHearings } from './quest-core';
 import { addRivalPlan } from './rivals';
 import { pickOne, pickWeightedIndex, randInt, roll } from './rng';
 import { US_STATES } from './geo';
-import type { Agent, Case, CaseKind, CaseSource, GameState, KompromatTarget, Operation, OpTarget, OpType, RivalId, SkillKey } from './types';
+import { coverLifeScandal, forgetSignal, scheduleDelayed, signalIsReal } from './dilemma-state';
+import type {
+	Agent,
+	Case,
+	CaseKind,
+	CaseSource,
+	CaseTag,
+	GameState,
+	KompromatTarget,
+	LogValue,
+	Operation,
+	OpTarget,
+	OpType,
+	RivalId,
+	SkillKey,
+	StateId
+} from './types';
 
 // ------------------------------------------------------------ доступ к делам (§5.4)
 
@@ -49,7 +68,8 @@ export function caseAccessible(s: GameState, c: Case): boolean {
 	const j = s.stateJurisdiction[c.stateId];
 	if (!j) return false;
 	if (j.level >= 2) return true;
-	if (j.level === 1) return c.kind === 'regular' && c.difficulty <= B.PARTIAL_JURISDICTION_MAX_DIFFICULTY;
+	// D-068: дело-провокация (tag 'sting') доступно при частичных полномочиях, хотя по виду это теракт.
+	if (j.level === 1) return (c.kind === 'regular' && c.difficulty <= B.PARTIAL_JURISDICTION_MAX_DIFFICULTY) || c.tag === 'sting';
 	return false;
 }
 
@@ -60,20 +80,31 @@ export function caseInterceptable(s: GameState, c: Case): boolean {
 	return !caseAccessible(s, c);
 }
 
-function stateWeights(s: GameState): number[] {
+function stateWeights(s: GameState, minJurisdiction = 0): number[] {
 	return US_STATES.map((id) => {
 		if ((s.strikes[id] ?? 0) > s.day) return 0;
 		if (s.leaders.some((l) => l.stateId === id && l.archetype === 'union' && l.influence >= B.LEADER_STRIKE_INFLUENCE)) return 0;
+		if ((s.stateJurisdiction[id]?.level ?? 0) < minJurisdiction) return 0;
 		return s.config.stateCaseWeights[id] ?? 1;
 	});
 }
 
+export interface SpawnCaseOptions {
+	difficulty?: number;
+	timerDays?: number | null;
+	rewardMult?: number;
+	source?: CaseSource;
+	minCyber?: number;
+	/** Штат задан заранее (дела из дилемм §9.8) — без броска штата. */
+	stateId?: StateId;
+	/** Только штаты с полномочиями ≥ этого уровня (дела «Ценного источника», §9.8). */
+	minJurisdiction?: number;
+	tag?: CaseTag | null;
+	signalRef?: number | null;
+}
+
 /** Создаёт дело. Штат выбирается pickWeighted (§5.4); при нулевой сумме весов дела нет. */
-export function spawnCase(
-	s: GameState,
-	kind: CaseKind,
-	opts: { difficulty?: number; timerDays?: number | null; rewardMult?: number; source?: CaseSource; minCyber?: number } = {}
-): Case | null {
+export function spawnCase(s: GameState, kind: CaseKind, opts: SpawnCaseOptions = {}): Case | null {
 	let difficulty = opts.difficulty;
 	if (difficulty === undefined) {
 		const w = kind === 'terror' ? B.TERROR_DIFFICULTY_WEIGHTS : B.CASE_DIFFICULTY_WEIGHTS;
@@ -83,13 +114,17 @@ export function spawnCase(
 	// §5.4, D-045: сила улики — один вызов RNG сразу после броска сложности, для любого дела.
 	const [emin, emax] = B.EVIDENCE_STRENGTH_RANGE;
 	const evidenceStrength = randInt(s, emin, emax);
-	const si = pickWeightedIndex(s, stateWeights(s));
-	if (si < 0) return null;
+	let stateId = opts.stateId;
+	if (stateId === undefined) {
+		const si = pickWeightedIndex(s, stateWeights(s, opts.minJurisdiction ?? 0));
+		if (si < 0) return null;
+		stateId = US_STATES[si];
+	}
 	const timer = opts.timerDays === undefined ? caseTimer(kind, s.survLevel) : opts.timerDays;
 	const c: Case = {
 		id: newId(s),
 		kind,
-		stateId: US_STATES[si],
+		stateId,
 		difficulty,
 		createdDay: s.day,
 		expiresDay: timer === null ? null : s.day + timer,
@@ -100,11 +135,22 @@ export function spawnCase(
 		raceDay: null,
 		raceBonus: 0,
 		intercepted: false,
-		takenByOpId: null
+		takenByOpId: null,
+		tag: opts.tag ?? null,
+		signalRef: opts.signalRef ?? null
 	};
 	s.cases.push(c);
-	log(s, 'case_new', { caseId: c.id, kind, stateId: c.stateId, difficulty });
+	log(s, 'case_new', c.tag ? { caseId: c.id, kind, stateId: c.stateId, difficulty, tag: c.tag } : { caseId: c.id, kind, stateId: c.stateId, difficulty });
 	return c;
+}
+
+/** Шанс атаки по нереализованному сигналу (§9.8, «как вариант 0»): если сигнал реален — теракт через randInt дней. */
+export function signalMissed(s: GameState, signalId: number): void {
+	if (signalIsReal(s, signalId)) {
+		const [a, b] = B.DL_SIGNAL.attackDelayDays;
+		scheduleDelayed(s, 'signal_attack', s.day + randInt(s, a, b), { signalId });
+	}
+	forgetSignal(s, signalId);
 }
 
 /** Получатель ушедшего дела: держатель штата или случайный живой соперник (§5.4). */
@@ -117,8 +163,12 @@ function caseLostToRival(s: GameState, c: Case, why: 'expired' | 'failed'): void
 	log(s, why === 'expired' ? 'case_expired' : 'case_lost', { caseId: c.id, to });
 }
 
-/** Шаг 4 дня: генерация и истечение дел. */
-export function dailyCases(s: GameState): void {
+/**
+ * Шаг 4 дня: генерация и истечение дел. onMonthStart — плановые события начала месяца после дел
+ * без таймера (§3.3 шаг 4: «Материал на кандидата», «Тихий сигнал», предложение линейки).
+ * Случайные дела бросаются до блока начала месяца, как и до D-067 (порядок RNG не меняли).
+ */
+export function dailyCases(s: GameState, onMonthStart?: () => void): void {
 	const m = month(s);
 	if (roll(s, casesPerMonth(m, hasTech(s, 'A2')) / B.DAYS_PER_MONTH)) spawnCase(s, 'regular');
 	if (roll(s, B.TERROR_PER_MONTH / B.DAYS_PER_MONTH)) spawnCase(s, 'terror');
@@ -128,6 +178,12 @@ export function dailyCases(s: GameState): void {
 			for (let i = 0; i < B.REPR_L3_EXTRA_CASES; i++) spawnCase(s, 'regular', { timerDays: null, source: 'repr3' });
 		if (s.counters.informantCasesUntilDay > s.day)
 			for (let i = 0; i < B.QUEST_INFORMANT.casesPerMonth; i++) spawnCase(s, 'regular', { timerDays: null, source: 'informant' });
+		// §9.8 «Ценный источник»: +casesPerMonth дел без таймера в штатах с полномочиями ≥ 1.
+		if (s.valuableSource) {
+			for (let i = 0; i < B.DL_VALUABLE_SOURCE.casesPerMonth; i++)
+				spawnCase(s, 'regular', { timerDays: null, source: 'dilemma', tag: 'source', minJurisdiction: 1 });
+		}
+		onMonthStart?.();
 	}
 	// Гонка карточки «Теракт в крупном городе» (§7).
 	for (const c of s.cases) {
@@ -144,8 +200,12 @@ export function dailyCases(s: GameState): void {
 	// Истечение.
 	const keep: Case[] = [];
 	for (const c of s.cases) {
-		if (c.takenByOpId === null && c.expiresDay !== null && c.expiresDay <= s.day) caseLostToRival(s, c, 'expired');
-		else {
+		if (c.takenByOpId === null && c.expiresDay !== null && c.expiresDay <= s.day) {
+			// §9.8: истёкшее дело-провокация исчезает и сопернику не уходит; истёкшая проверка сигнала — «как вариант 0».
+			if (c.tag === 'sting') log(s, 'case_expired', { caseId: c.id, to: null });
+			else caseLostToRival(s, c, 'expired');
+			if (c.tag === 'signal' && c.signalRef !== null) signalMissed(s, c.signalRef);
+		} else {
 			if (
 				c.takenByOpId === null &&
 				c.expiresDay !== null &&
@@ -194,35 +254,84 @@ export interface OpChanceArgs {
 	type: OpType;
 	difficulty: number;
 	target: OpTarget | null;
+	/** Команда в порядке §5.2: стартовый состав в порядке назначения, затем подкрепление в порядке присоединения. */
 	team: Agent[];
 	/** Агенты сверх минимума, присоединившиеся после 50 % прогресса. */
 	lateIds?: number[];
+	/** Прибавки к шансу из дилемм (§9.8) и от дела (провокация): входят в bonus и в p_shown. */
+	extraBonus?: number;
 }
 
-/** Полный шанс операции на заданной команде (используется и для превью в UI). */
-export function computeOpChance(s: GameState, a: OpChanceArgs): number {
-	if (a.team.length === 0) return 0;
+/** §9.8: прибавка от метки дела — «Поимка террористов» на деле-провокации +DL_STING.chanceBonus. */
+export function caseChanceBonus(c: Case | null | undefined, type: OpType): number {
+	return c && c.tag === 'sting' && type === 'terror' ? B.DL_STING.chanceBonus : 0;
+}
+
+/** Прибавки к шансу конкретной операции: дилеммы (op.dilemmaBonus) и метка дела. Видны игроку. */
+export function opExtraBonus(s: GameState, op: Operation): number {
+	const c = op.caseId !== null ? s.cases.find((x) => x.id === op.caseId) : undefined;
+	return op.dilemmaBonus + caseChanceBonus(c, op.type);
+}
+
+/** Аргументы шанса для идущей операции (итоговый состав, поздние, прибавки). */
+export function opChanceArgs(s: GameState, op: Operation): OpChanceArgs {
+	return {
+		type: op.type,
+		difficulty: op.difficulty,
+		target: op.target,
+		team: teamOf(s, op),
+		lateIds: op.extraJoinedLate,
+		extraBonus: opExtraBonus(s, op)
+	};
+}
+
+function opChanceInput(s: GameState, a: OpChanceArgs) {
 	const req = B.OP_AGENTS_REQUIRED[a.type];
-	const teamSkill = Math.max(...a.team.map((x) => primarySkill(x, a.type)));
-	const teamLevel = a.team.reduce((sum, x) => sum + x.level, 0) / a.team.length;
-	const extras = a.team.slice(req, req + B.OP_MAX_EXTRA_AGENTS);
 	const late = new Set(a.lateIds ?? []);
-	const extra = extras.reduce((sum, x) => sum + (late.has(x.id) ? B.OP_LATE_REINFORCE_FACTOR : 1), 0);
-	return opSuccessChance({
+	// §5.2, D-066: навык и уровень — максимум по команде; слоты — агенты сверх минимума по порядку team.
+	const slots = a.team.slice(req).map((x) => late.has(x.id));
+	return {
 		type: a.type,
 		difficulty: a.difficulty,
-		teamSkill,
-		teamLevel,
-		extra,
+		teamSkill: Math.max(...a.team.map((x) => primarySkill(x, a.type))),
+		teamLevel: Math.max(...a.team.map((x) => x.level)),
+		reinforce: reinforceBonus(slots),
 		deptLevel: dept(s, opDept(a.type)),
-		bonus: situationalBonus(s, a.type, a.target) + teamPerkTraitBonus(s, a.team, a.type),
-		hasMole: a.team.some((x) => x.moleFor !== null)
-	});
+		bonus: situationalBonus(s, a.type, a.target) + teamPerkTraitBonus(s, a.team, a.type) + (a.extraBonus ?? 0)
+	};
+}
+
+/**
+ * §5.2, D-066: p_shown — шанс, который видит игрок (превью, список операций).
+ * Без штрафа крота: иначе превью выдавало бы крота. Добавление агента его не уменьшает.
+ */
+export function computeOpShownChance(s: GameState, a: OpChanceArgs): number {
+	if (a.team.length === 0) return 0;
+	return opShownChance(opChanceInput(s, a));
+}
+
+/** §5.2: p — шанс броска (p_shown − штраф крота). Только для броска, не для UI. */
+export function computeOpChance(s: GameState, a: OpChanceArgs): number {
+	if (a.team.length === 0) return 0;
+	return opRollChance(computeOpShownChance(s, a), a.team.some((x) => x.moleFor !== null));
+}
+
+/**
+ * Прибавка к p_shown от ещё одного агента сейчас (§10.3: «+6 %», «+4 %», после 50 % срока — вдвое меньше).
+ * null — команда уже полная. Это только слот подкрепления; навык, уровень и перки нового агента
+ * могут добавить сверху (UI считает точное значение через previewOperation с новым составом).
+ */
+export function nextReinforceBonus(type: OpType, teamSize: number, late: boolean): number | null {
+	const req = B.OP_AGENTS_REQUIRED[type];
+	if (teamSize >= req + B.OP_MAX_EXTRA_AGENTS) return null;
+	const slot = teamSize - req;
+	if (slot < 0) return 0;
+	return (B.OP_REINFORCE_BONUS_BY_SLOT[slot] ?? 0) * (late ? B.OP_LATE_REINFORCE_FACTOR : 1);
 }
 
 // ------------------------------------------------------------ завершение (§5.3)
 
-function teamOf(s: GameState, op: Operation): Agent[] {
+export function teamOf(s: GameState, op: Operation): Agent[] {
 	return op.agentIds.map((id) => agentById(s, id)).filter((x): x is Agent => !!x);
 }
 
@@ -253,7 +362,7 @@ function kompromatTargetOf(s: GameState, t: OpTarget): KompromatTarget {
 	}
 }
 
-function recordHighProfile(s: GameState, stateId: string): void {
+export function recordHighProfile(s: GameState, stateId: string): void {
 	s.highProfile = s.highProfile.filter((h) => s.day - h.day < B.HIGH_PROFILE_STATE_UPGRADE.windowDays);
 	s.highProfile.push({ stateId, day: s.day });
 	const n = s.highProfile.filter((h) => h.stateId === stateId).length;
@@ -266,13 +375,107 @@ function recordHighProfile(s: GameState, stateId: string): void {
 	}
 }
 
-/** Шаг 3 дня: бросок успеха и последствия для одной операции. */
+/** Снимок ресурсов игрока для подсчёта итога операции (без RNG). */
+interface OpResourceSnapshot {
+	budget: number;
+	planPoints: number;
+	reputation: number;
+	influence: number;
+	exposure: number;
+	investigation: number;
+	kompromatOnPlayer: number;
+	/** s.nextId до разрешения: новые предметы компромата имеют id ≥ этого значения. */
+	nextId: number;
+}
+
+function opResourceSnapshot(s: GameState): OpResourceSnapshot {
+	return {
+		budget: s.budget,
+		planPoints: s.plan.points,
+		reputation: s.reputation,
+		influence: s.influence,
+		exposure: s.exposure,
+		investigation: s.investigation,
+		kompromatOnPlayer: s.rivals.reduce((sum, r) => sum + r.kompromatOnPlayer, 0),
+		nextId: s.nextId
+	};
+}
+
+/** Округление разницы до сотых, чтобы не тащить в журнал шум float. */
+function roundDelta(x: number): number {
+	return Math.round(x * 100) / 100;
+}
+
+/**
+ * Поля data записей op_success / op_fail про дело, цель и последствия (см. OpResultLogData в types.ts).
+ * Нулевые разницы и пустые списки не пишутся.
+ */
+function opResultData(
+	s: GameState,
+	op: Operation,
+	c: Case | null,
+	before: OpResourceSnapshot,
+	killed: number[],
+	captured: number[]
+): Record<string, LogValue> {
+	const d: Record<string, LogValue> = {};
+	if (c) {
+		d.stateId = c.stateId;
+		d.caseKind = c.kind;
+		d.difficulty = c.difficulty;
+		if (c.tag) d.caseTag = c.tag;
+	}
+	if (op.target) {
+		d.targetKind = op.target.kind;
+		if (op.target.kind !== 'president') d.targetId = op.target.id;
+	}
+	const after = opResourceSnapshot(s);
+	const deltas: [string, number][] = [
+		['budgetDelta', after.budget - before.budget],
+		['planPointsDelta', after.planPoints - before.planPoints],
+		['reputationDelta', after.reputation - before.reputation],
+		['influenceDelta', after.influence - before.influence],
+		['exposureDelta', after.exposure - before.exposure],
+		['investigationDelta', after.investigation - before.investigation],
+		['kompromatOnPlayerDelta', after.kompromatOnPlayer - before.kompromatOnPlayer]
+	];
+	for (const [k, v] of deltas) {
+		const r = roundDelta(v);
+		if (r !== 0) d[k] = r;
+	}
+	const gained = s.kompromat.filter((k) => k.id >= before.nextId).length;
+	if (gained > 0) d.kompromatGained = gained;
+	if (killed.length > 0) d.killedAgentIds = killed.join(',');
+	if (captured.length > 0) d.capturedAgentIds = captured.join(',');
+	return d;
+}
+
+/**
+ * Бросок успеха операции (§5.2, шаг 3 дня). Без мутаций, кроме RNG.
+ * «Успех без броска» из дилемм (op.forcedSuccess) не тратит RNG, шанс в журнале — 1.
+ */
+export function rollOperation(s: GameState, op: Operation): { success: boolean; p: number } {
+	if (op.forcedSuccess) return { success: true, p: 1 };
+	const p = computeOpChance(s, opChanceArgs(s, op));
+	return { success: roll(s, p), p };
+}
+
+/** Шаг 3 дня без дилемм: бросок и последствия (тесты и операции без привязанной дилеммы). */
 export function completeOperation(s: GameState, op: Operation): void {
+	const r = rollOperation(s, op);
+	applyOperationResult(s, op, r.success, r.p);
+}
+
+/** Последствия операции по уже известному итогу броска (§5.3, §9.8). */
+export function applyOperationResult(s: GameState, op: Operation, success: boolean, p: number): void {
 	const team = teamOf(s, op);
 	const c = op.caseId !== null ? s.cases.find((x) => x.id === op.caseId) ?? null : null;
-	const p = computeOpChance(s, { type: op.type, difficulty: op.difficulty, target: op.target, team, lateIds: op.extraJoinedLate });
-	const success = roll(s, p);
+	// Снимок для итога в журнале (op_success / op_fail); RNG не трогает.
+	const before = opResourceSnapshot(s);
+	const killed: number[] = [];
+	const captured: number[] = [];
 	s.operations = s.operations.filter((o) => o.id !== op.id);
+	s.dilemmas.pending = s.dilemmas.pending.filter((d) => d.opId !== op.id);
 
 	// Общее: XP, счётчики лояльности, Болтун, статус.
 	const mentor = team.some((a) => hasPerk(a, 'mentor'));
@@ -289,40 +492,71 @@ export function completeOperation(s: GameState, op: Operation): void {
 	}
 	if (!success) s.counters.lastPlayerFailDay = s.day;
 	const legal = legalFailMult(dept(s, 'legal'));
+	const planPoints = (n: number) => {
+		if (!op.noPlanPoint) s.plan.points += n;
+	};
 
 	switch (op.type) {
 		case 'investigation': {
 			if (success && c) {
 				addReputation(s, B.OP_INVEST_REP_SUCCESS);
-				s.plan.points += B.OP_INVEST_PLAN_POINTS;
-				addBudget(s, opReward('investigation', c.difficulty, c.rewardMult));
+				planPoints(B.OP_INVEST_PLAN_POINTS);
+				addBudget(s, opReward('investigation', c.difficulty, c.rewardMult * op.rewardMult));
 				for (const a of team) if (hasTrait(a, 'hero')) addReputation(s, B.TRAIT_HERO_REP_ON_SUCCESS);
 				if (c.difficulty >= B.HIGH_PROFILE_MIN_DIFFICULTY) recordHighProfile(s, c.stateId);
+				// §9.8 «Тихий сигнал», «Проверить по правилам»: если сигнал реален — roll(legalCatch).
+				if (c.tag === 'signal' && c.signalRef !== null) {
+					if (signalIsReal(s, c.signalRef) && roll(s, B.DL_SIGNAL.legalCatch)) {
+						s.history.signalsPrevented += 1;
+						forgetSignal(s, c.signalRef);
+						log(s, 'signal_prevented', { signalId: c.signalRef, method: 'legal', stateId: c.stateId });
+					} else signalMissed(s, c.signalRef);
+				}
 			} else if (c) {
 				opRepLoss(s, B.OP_INVEST_REP_FAIL);
 				caseLostToRival(s, c, 'failed');
+				if (c.tag === 'signal' && c.signalRef !== null) signalMissed(s, c.signalRef);
 			}
 			break;
 		}
 		case 'terror': {
+			const sting = c?.tag === 'sting';
 			if (success && c) {
 				addReputation(s, B.OP_TERROR_REP_SUCCESS);
-				s.plan.points += B.OP_TERROR_PLAN_POINTS;
+				planPoints(B.OP_TERROR_PLAN_POINTS);
 				addInfluence(s, B.OP_TERROR_INFLUENCE);
-				addBudget(s, opReward('terror', c.difficulty, c.rewardMult));
+				addBudget(s, opReward('terror', c.difficulty, c.rewardMult * op.rewardMult));
 				if (c.raceDay !== null && s.day <= c.raceDay) addBudget(s, c.raceBonus);
 				for (const a of team) if (hasTrait(a, 'hero')) addReputation(s, B.TRAIT_HERO_REP_ON_SUCCESS);
 				recordHighProfile(s, c.stateId);
+				// §9.8 «Провокация»: при успехе — отложенный «Судья увидел провокацию».
+				if (sting) {
+					const [a, b] = B.DL_STING.judgeDelayDays;
+					scheduleDelayed(s, 'sting_judge', s.day + randInt(s, a, b), { stateId: c.stateId });
+				}
+			} else if (sting) {
+				// §9.8: провал на деле-провокации — только репутация, без гибели и без ухода дела сопернику.
+				addReputation(s, B.DL_STING.failRep);
 			} else {
 				opRepLoss(s, B.OP_TERROR_REP_FAIL);
 				opExposure(s, op, team, B.OP_TERROR_FAIL_EXPOSURE * legal);
 				for (const a of team) {
-					if (roll(s, terrorDeathChance(a.skills.combat, hasPerk(a, 'marksman')))) {
+					// §5.3, D-066: бросок по порядку team, «прикрытие» по размеру команды на момент завершения.
+					if (roll(s, terrorDeathChance(a.skills.combat, hasPerk(a, 'marksman'), team.length))) {
 						removeAgent(s, a.id);
+						killed.push(a.id);
 						log(s, 'agent_killed', { agentId: a.id });
 					}
 				}
 				if (c) caseLostToRival(s, c, 'failed');
+			}
+			// §9.8 «Поделиться с ЦРУ»: при успехе — план и репутация ЦРУ.
+			if (success && op.dilemmaId === 'share_with_cia' && op.dilemmaChoice === 'share') {
+				const cia = s.rivals.find((r) => r.id === 'cia' && r.alive);
+				if (cia) {
+					addRivalPlan(cia, B.DL_SHARE_CIA.ciaPlan);
+					addRivalRep(cia, B.DL_SHARE_CIA.ciaRep);
+				}
 			}
 			break;
 		}
@@ -333,6 +567,8 @@ export function completeOperation(s: GameState, op: Operation): void {
 			if (success) {
 				main.status = 'embedded';
 				main.location = t.kind === 'rival' ? { rivalId: t.id } : t.kind === 'leader' ? { leaderId: t.id } : null;
+				// §9.8 «Легенда требует личной жизни»: флаг у внедрённого агента.
+				main.coverLife = op.dilemmaId === 'cover_life' && op.dilemmaChoice === 'allow';
 				if (t.kind === 'leader') {
 					const l = s.leaders.find((x) => x.id === t.id);
 					if (l) l.underWatch = true;
@@ -342,10 +578,14 @@ export function completeOperation(s: GameState, op: Operation): void {
 				if (t.kind === 'rival') addKompromatOnPlayer(s, t.id, B.OP_INFILTRATION_FAIL.rivalKompromat);
 				if (roll(s, B.OP_INFILTRATION_FAIL.lossChance)) {
 					removeAgent(s, main.id);
+					captured.push(main.id);
 					log(s, 'agent_captured', { agentId: main.id });
 				} else {
 					main.loyalty = Math.max(0, main.loyalty + B.OP_INFILTRATION_FAIL.loyalty);
 				}
+				// §9.8 (б), D-068: провал этой операции с «Разрешить» — team[0] раскрыт (в том числе пойман):
+				// бросок «Двойной жизни агента» после броска поимки.
+				if (op.dilemmaId === 'cover_life' && op.dilemmaChoice === 'allow') coverLifeScandal(s, main.id);
 			}
 			break;
 		}
@@ -376,7 +616,13 @@ export function completeOperation(s: GameState, op: Operation): void {
 		}
 	}
 	if (c) s.cases = s.cases.filter((x) => x.id !== c.id);
-	log(s, success ? 'op_success' : 'op_fail', { opId: op.id, type: op.type, caseId: op.caseId, chance: p });
+	log(s, success ? 'op_success' : 'op_fail', {
+		opId: op.id,
+		type: op.type,
+		caseId: op.caseId,
+		chance: p,
+		...opResultData(s, op, c, before, killed, captured)
+	});
 	autopause(s, 'operationDone');
 }
 
@@ -388,8 +634,3 @@ function bestSkillFor(a: Agent, type: OpType): SkillKey {
 	return best;
 }
 
-/** Шаг 3 дня: все операции с истёкшим таймером в порядке id. */
-export function completeDueOperations(s: GameState): void {
-	const due = s.operations.filter((o) => o.endDay <= s.day).sort((a, b) => a.id - b.id);
-	for (const op of due) completeOperation(s, op);
-}

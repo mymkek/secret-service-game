@@ -153,7 +153,13 @@ export const ERROR_LABEL: Record<string, string> = {
 	kompromat_unavailable: 'Компромат недоступен',
 	bad_actor: 'Неверный исполнитель',
 	bad_action: 'Неверное действие',
-	rival_dead: 'Соперник уже выбыл'
+	rival_dead: 'Соперник уже выбыл',
+	agent_on_line: 'Агент ведёт линейку «Народный авангард»',
+	no_line: 'Линейки нет',
+	line_stage_running: 'Этап линейки уже идёт: отзыв возможен только в паузе между этапами',
+	sting_active: 'Уже идёт дело-провокация',
+	need_cyber1: 'Нужен Киберотдел 1',
+	need_skill7: 'Нужен агент с навыком 7 и выше'
 };
 export const errorText = (e: string | null | undefined): string => (e ? (ERROR_LABEL[e] ?? e) : '');
 
@@ -186,7 +192,83 @@ export const CHOICE_LABELS: Record<string, string> = {
 	purge: 'Провести чистку',
 	flee: 'Бежать',
 	improvise: 'Импровизировать',
-	ok: 'Понятно'
+	ok: 'Понятно',
+	// дилеммы (§9.8)
+	arrest: 'Арестовать источника',
+	recruit: 'Завербовать',
+	surrender: 'Передать правосудию',
+	blind_eye: 'Закрыть глаза',
+	by_the_book: 'По протоколу',
+	press: 'Надавить',
+	observe: 'Наблюдать',
+	provoke: 'Спровоцировать',
+	wait: 'Ждать',
+	legal: 'Законный путь',
+	wiretap: 'Прослушка без ордера',
+	keep: 'Оставить себе',
+	share: 'Поделиться',
+	fudge: 'Подогнать даты',
+	forbid: 'Запретить',
+	silent: 'Промолчать',
+	announce: 'Объявить публично',
+	leak: 'Слить прессе',
+	// линейка (§9.9)
+	decline: 'Отказаться',
+	start: 'Начать',
+	alone: 'Одному',
+	partner: 'С напарником',
+	cautious: 'Осторожно',
+	devoted: 'Всерьёз',
+	evidence: 'Собрать улики',
+	quiet: 'Тихо свернуть',
+	recall: 'Отозвать',
+	go: 'Идти до конца'
+};
+
+/** Метки дел, возникших из дилемм (§9.8). */
+export const CASE_TAG: Record<string, { label: string; hint: string; tone: 'default' | 'gold' | 'ok' | 'warn' | 'danger' | 'info' }> = {
+	sting: { label: 'провокация', hint: 'Дело создано вашей провокацией: у подозреваемого не было своих планов', tone: 'danger' },
+	signal: { label: 'сигнал', hint: 'Дело из тихого сигнала: он может оказаться ложным', tone: 'warn' },
+	source: { label: 'источник', hint: 'Дело вокруг ценного источника', tone: 'info' },
+	real_culprit: { label: 'настоящий виновник', hint: 'Вскрылось, что арестован был не тот человек', tone: 'gold' }
+};
+
+export const RISK_LABEL: Record<string, string> = { low: 'низкий', medium: 'средний', high: 'высокий' };
+
+/** Запасное описание окон дилемм, пока content.dilemmas не заполнен. */
+export const DILEMMA_BODY: Record<string, string> = {
+	dilemma_valuable_source: 'Операция раскрыла ценного источника в преступной среде. Его можно арестовать сейчас или оставить на воле и завербовать.',
+	dilemma_source_crime: 'Ваш источник совершил преступление. Передать его правосудию или закрыть глаза, чтобы не потерять доступ.',
+	dilemma_forced_confession: 'Подозреваемый молчит. Можно действовать строго по протоколу, надавить на него или предложить сделку.',
+	dilemma_sting: 'Подозреваемый сам ничего не планировал. Можно наблюдать за ним или подтолкнуть к преступлению, чтобы потом арестовать.',
+	dilemma_quiet_signal: 'Слабый сигнал о возможной угрозе. Он может оказаться ложным. Выберите, как на него реагировать.',
+	dilemma_share_with_cia: 'Расследование теракта вывело на данные, которые нужны ЦРУ. Поделиться или оставить себе.',
+	dilemma_fudged_warrant: 'Ордер на слежку ещё не готов. Можно подождать или подогнать даты задним числом.',
+	dilemma_cover_life: 'Внедрённый агент просит разрешения на личную жизнь под прикрытием. Это повышает правдоподобие, но создаёт риск.',
+	dilemma_election_dossier: 'Накануне выборов у вас на руках досье на кандидата. Промолчать, объявить или слить прессе.',
+	vanguard_offer: 'Поступило предложение внедрить агента в радикальное движение «Народный авангард». Ведущему нужен навык 7 и выше.',
+	vanguard_stage2: 'Агент внутри движения. Выберите, как действовать дальше.',
+	vanguard_stage3: 'Движение готовится к акции. Решите, собирать улики или подтолкнуть события.',
+	vanguard_stage4: 'Финальный этап операции.',
+	vanguard_result: 'Операция «Народный авангард» завершена.'
+};
+
+/** Запасные названия окон дилемм и линейки (основные — content.dilemmas). */
+const DILEMMA_TITLES: Record<string, string> = {
+	dilemma_valuable_source: 'Ценный источник',
+	dilemma_source_crime: 'Преступление источника',
+	dilemma_forced_confession: 'Признание под давлением',
+	dilemma_sting: 'Провокация',
+	dilemma_quiet_signal: 'Тихий сигнал',
+	dilemma_share_with_cia: 'Поделиться с ЦРУ',
+	dilemma_fudged_warrant: 'Ордер «задним числом»',
+	dilemma_cover_life: 'Легенда требует личной жизни',
+	dilemma_election_dossier: 'Досье перед выборами',
+	vanguard_offer: '«Народный авангард»: предложение',
+	vanguard_stage2: '«Народный авангард»: этап 2',
+	vanguard_stage3: '«Народный авангард»: этап 3',
+	vanguard_stage4: '«Народный авангард»: этап 4',
+	vanguard_result: '«Народный авангард»: итог'
 };
 
 export const QUEST_TITLES: Record<string, string> = {
@@ -203,7 +285,8 @@ export const QUEST_TITLES: Record<string, string> = {
 	double_agent: 'Двойной агент',
 	airport: 'Аэропорт',
 	plan_warning: 'Предупреждение по плану',
-	director_questioning: 'Допрос директора'
+	director_questioning: 'Допрос директора',
+	...DILEMMA_TITLES
 };
 export const STATE_NAMES: Record<string, string> = {
 	AL: 'Алабама', AK: 'Аляска', AZ: 'Аризона', AR: 'Арканзас', CA: 'Калифорния', CO: 'Колорадо', CT: 'Коннектикут', DE: 'Делавэр', FL: 'Флорида', GA: 'Джорджия',

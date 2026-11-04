@@ -14,7 +14,7 @@
 	{#each lines as l (l.e.id)}
 		<li class="flex gap-2">
 			<span class="w-10 shrink-0 text-right text-xs text-muted tabular-nums">д.{l.e.day}</span>
-			<span class={tone[l.severity]}>{l.text}</span>
+			<span class="whitespace-pre-line {tone[l.severity]}">{l.text}</span>
 		</li>
 	{:else}
 		<li class="text-muted">Пока тихо. Снимите паузу, чтобы время пошло.</li>

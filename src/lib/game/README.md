@@ -20,7 +20,7 @@ const r = advance(s, days);                        // r.events — новые з
 if (r.stoppedBy === 'autopause') showWindows(s.pauseReasons, selectQuests(s));
 
 // приказ игрока (можно и на паузе)
-const res = applyAction(s, 'player', { type: 'startOp', opType: 'investigation', caseId: 42, agentIds: [3, 5] });
+const res = applyAction(s, 'player', { type: 'startOp', opType: 'investigation', caseId: 42, agentIds: [3] });
 if (!res.ok) toast(res.error);                     // коды ошибок см. ниже
 
 // сохранение: saves.state_json
@@ -35,12 +35,12 @@ const loaded = deserialize(json);                  // с миграцией sche
 | Функция | Что делает |
 |---|---|
 | `createGame({ seed, config?, speed?, autopause? })` | Новая партия. `config` берётся из контента: `contentToConfig(bundle)` |
-| `advance(s, days, { ignorePause?, strategy? })` | Продвигает время до `days` дней. Останавливается на автопаузе и на конце партии. На паузе ничего не делает. Возвращает `{ daysAdvanced, stoppedBy: 'completed'\|'paused'\|'autopause'\|'gameOver', events }` |
+| `advance(s, days, { ignorePause?, strategy? })` | Продвигает время до `days` дней. Останавливается на автопаузе и на конце партии. На паузе ничего не делает. Пока открыто **модальное окно** дилеммы или линейки (§9.8, §9.9), без `ignorePause` время не идёт вовсе: `advance` ставит паузу (`questChoice`) и возвращает `daysAdvanced: 0, stoppedBy: 'autopause'`, даже после `setPaused(s, false)`. С `ignorePause` (симулятор) дни идут, но операция, ждущая выбора, не завершается. Возвращает `{ daysAdvanced, stoppedBy: 'completed'\|'paused'\|'autopause'\|'gameOver', events }` |
 | `stepDay(s, { strategy? })` | Один день строго по порядку §3.3 (сам паузу не проверяет) |
 | `setPaused(s, bool)` | Пауза. При снятии паузы очищается `s.pauseReasons` |
 | `setSpeed(s, 1\|2\|3)` | Скорость. Влияет только на `realtimeToDays` |
 | `realtimeToDays(speed, elapsedMs, carryMs)` | Переводит мс в целые дни по `DAY_MS_BY_SPEED`, возвращает остаток |
-| `serialize(s)` / `deserialize(json)` | JSON для `saves.state_json`. `SCHEMA_VERSION` (сейчас 5) и `MIGRATIONS` лежат в `state.ts`; сейвы v1–v4 мигрируют автоматически |
+| `serialize(s)` / `deserialize(json)` | JSON для `saves.state_json`. `SCHEMA_VERSION` (сейчас 7) и `MIGRATIONS` лежат в `state.ts`; сейвы v1–v6 мигрируют автоматически (v5 → v6: поля D-067 по умолчанию; v6 → v7: у ждущих дилемм `assignedDay`/`prevLastDay` = `null`, D-069) |
 | `cloneState(s)` | Глубокая копия |
 
 **Автопауза** (§3.4). Флаги лежат в `s.autopause` (по умолчанию `AUTOPAUSE_DEFAULTS`), их можно менять напрямую из настроек. Причины текущей паузы — в `s.pauseReasons` (ключи `AutopauseKey`).
@@ -61,11 +61,13 @@ const loaded = deserialize(json);                  // с миграцией sche
 | Операции | `startOp {opType, agentIds, caseId? \| target?}`, `reinforceOp {opId, agentId}`, `cancelOp {opId}`, `recallEmbedded {agentId}`, `fakeStats {points}` |
 | Конкуренты (§6.3) | `leak {kompromatId}`, `intercept {caseId}`, `sabotage {rivalId}`, `lobby {rivalId}`, `poach {rivalId}`, `congressWork`, `prCampaign`, `absorb {rivalId}`, `counterKompromat {kompromatId}`, `scapegoat {agentId}`, `loyaltyCheck`, `restoreState {stateId}`, `blackmail {kompromatId}`, `removeLeader {leaderId}` |
 | Сети (§9.1) | `deployAgent {agentId, countryId, legend, prep, recruit}`, `recallAgent {agentId}` |
-| Квесты | `questChoice {sessionId, choice, param?}` |
+| Квесты, дилеммы, линейка | `questChoice {sessionId, choice, param?}`, `lineRecall` (отозвать агентов «Народного авангарда» в паузе между этапами, §9.9) |
 
 Цели операций (`OpTarget`): `{kind:'rival', id}`, `{kind:'leader', id}`, `{kind:'senator', id:'senator_1'..}`, `{kind:'president'}`.
 
-Коды ошибок: `game_over`, `no_money`, `no_influence`, `agent_cap`, `agent_busy`, `agent_not_found`, `candidate_not_found`, `requirements`, `max_level`, `min_level`, `already_building`, `already_known`, `already_running`, `research_busy`, `previous_tier`, `apex_locked`, `no_research`, `cooldown`, `skill_cap`, `bad_value`, `bad_target`, `target_required`, `case_not_found`, `case_taken`, `bad_case_kind`, `no_jurisdiction`, `case_not_interceptable`, `not_enough_agents`, `too_many_agents`, `team_full`, `agent_forbids_dirty`, `op_not_found`, `agent_not_embedded`, `agent_not_abroad`, `need_embedded_agent`, `kompromat_not_found`, `fake_limit`, `no_pending_perk`, `quest_not_found`, `choice_not_found`, `choice_unavailable`, `no_idle_agent`, `no_kompromat`, `need_repr5`, `need_legal3`, `kompromat_unavailable`, `bad_actor`, `bad_action`, `rival_dead`, `credit_limit` (запуск операции превысил бы лимит кредита, D-051), `repr_requires_surv` (откат слежки ниже требования активных репрессий, D-054), `rival_collapsing` (действие ИИ «на грани», D-059). У `counterKompromat` теперь бывает `cooldown` (D-057).
+Коды ошибок: `game_over`, `no_money`, `no_influence`, `agent_cap`, `agent_busy`, `agent_not_found`, `candidate_not_found`, `requirements`, `max_level`, `min_level`, `already_building`, `already_known`, `already_running`, `research_busy`, `previous_tier`, `apex_locked`, `no_research`, `cooldown`, `skill_cap`, `bad_value`, `bad_target`, `target_required`, `case_not_found`, `case_taken`, `bad_case_kind`, `no_jurisdiction`, `case_not_interceptable`, `not_enough_agents`, `too_many_agents`, `team_full`, `agent_forbids_dirty`, `op_not_found`, `agent_not_embedded`, `agent_not_abroad`, `need_embedded_agent`, `kompromat_not_found`, `fake_limit`, `no_pending_perk`, `quest_not_found`, `choice_not_found`, `choice_unavailable`, `no_idle_agent`, `no_kompromat`, `need_repr5`, `need_legal3`, `kompromat_unavailable`, `bad_actor`, `bad_action`, `rival_dead`, `credit_limit` (запуск операции превысил бы лимит кредита, D-051), `repr_requires_surv` (откат слежки ниже требования активных репрессий, D-054), `rival_collapsing` (действие ИИ «на грани», D-059). У `counterKompromat` теперь бывает `cooldown` (D-057). D-067: `agent_on_line` (`recallEmbedded` для агента линейки), `no_line`, `line_stage_running` (`lineRecall` во время этапа); причины недоступности выборов `sting_active`, `need_cyber1`, `need_skill7`, `rival_dead`.
+
+**Команда операции (D-066).** На любое задание хватает одного агента (`OP_AGENTS_REQUIRED` = 1), максимум 1 + `OP_MAX_EXTRA_AGENTS` = 3. Порядок `agentIds` важен: первый — ведущий (при «Внедрении» внедряется только он), следующие — слоты подкрепления (+0.06, +0.04; присоединившийся после 50 % срока — ×0.5). Навык и уровень команды берутся максимумом, поэтому добавление агента никогда не снижает показываемый шанс.
 
 **Деньги (D-037, D-051).** Найм, стройка, исследования, действия и платные варианты квестов требуют `budget ≥ цены`. Исключение — запуск операций: он разрешён, пока бюджет после оплаты не ниже `−creditLimit`, где `creditLimit = round(CREDIT_LIMIT_MONTHS × lastIncome)`. В конце месяца, сразу после расходов, на долг начисляется `CREDIT_INTEREST_RATE`. Банкротство — по-прежнему 3 месяца подряд с бюджетом < 0.
 
@@ -79,14 +81,17 @@ const loaded = deserialize(json);                  // с миграцией sche
 | `selectSurvRollbackFloor(s)` | ниже какого уровня слежку откатить нельзя из-за активных репрессий (D-054) |
 | `selectForecast(s)` | доход и расходы ближайшего конца месяца |
 | `selectAgents(s)`, `selectHirePool(s)`, `resolveAgentName(agent, names)` | персонал (крот скрыт) |
-| `selectCases(s)`, `previewOperation(s, {opType, agentIds, caseId?, target?})`, `selectOperations(s)` | операции: доступность по полномочиям, таймеры, шанс до старта (§5.2), прогресс |
+| `selectCases(s)`, `previewOperation(s, {opType, agentIds, caseId?, target?})`, `selectOperations(s)` | операции: доступность по полномочиям, таймеры, прогресс. `chance` — это **`p_shown`** (§5.2, D-066): без штрафа крота, с прибавками дилемм и дела-провокации; бросок идёт по `p = p_shown − OP_MOLE_PENALTY`, если в команде крот. `nextAgentBonus` — прибавка слота от ещё одного агента (0.06, затем 0.04; после 50 % срока вдвое меньше; `null` — команда полная). `nextAgentSpecial`: `'cover'` (теракт: каждый агент снижает гибель остальных при провале на 0.05) или `null`; `'goodbad'` с D-068 не возвращается (мини-игры допроса в v1 нет), тип `TeamSpecial = 'cover' | null`. У операции `held: true` — завершение ждёт выбора в окне дилеммы; `dilemmaBonus` — прибавка из дилемм. У дела `tag`: `'sting'`, `'signal'`, `'real_culprit'`, `'source'` или `null` |
 | `selectRivals(s)`, `selectKompromat(s)` | досье на конкурентов, известные действия, компромат; `collapsing` и `disbandDay` — соперник «на грани» (D-059) |
 | `selectDepartments(s)`, `selectBranches(s)`, `selectTechTree(s)` | отделы, слежка, репрессии, лидеры, технологии (`canBuild`/`canResearch` — код ошибки или `null`) |
 | `selectNetworks(s)`, `selectJurisdiction(s)` | сети за рубежом, карта полномочий |
-| `selectActionCosts(s): ActionCosts` | цены, траты влияния, откаты (`readyInDays`), шансы и риски, коды ошибок для `congressWork`, `prCampaign`, `loyaltyCheck`, `counterKompromat`, а также по соперникам: `rivals[id].sabotage/lobby/poach/absorb`; `leak[]` — по каждому предмету компромата |
-| `selectDeployCost(s, legend, recruit): DeployCostView`, `selectDeployOptions(s)` | цена заброски (`LEGEND_COST` + деньги на вербовку) и таблица легенд и способов вербовки |
+| `selectActionCosts(s): ActionCosts` | цены, траты влияния, откаты (`readyInDays`), шансы и риски, коды ошибок для `congressWork`, `prCampaign`, `loyaltyCheck`, `counterKompromat`, а также по соперникам: `rivals[id].sabotage/lobby/poach/absorb`; `leak[]` — по каждому предмету компромата; `blackmail[]` — шантаж по каждому предмету компромата на сенатора (`risk` = `QUEST_SENATOR.scandalP`, `influenceGain`, `readyInDays` — откат) |
+| `selectDeployCost(s, legend, recruit): DeployCostView`, `selectDeployOptions(s, agentId?)` | цена заброски (`LEGEND_COST` + деньги на вербовку) и таблица легенд и способов вербовки. С `agentId` шанс вербовки `recruit[].chance` учитывает перк «Переговорщик» (+0.10, кламп 0.05..0.95, `formulas.recruitChance`, D-068) |
 | `selectSenators(s): SenatorView[]` | бюджетный комитет: `id` (ключ имени в контенте), `index`, `resistance`, сложность слежки, компромат, откат шантажа |
 | `selectQuests(s)` | открытые сессии с доступными выборами |
+| `selectBlockingQuest(s)` | открытое модальное окно дилеммы или этапа линейки (время стоит до выбора) или `null` |
+| `selectLine(s)` | линейка «Народный авангард»: `{ line: { stage, phase: 'stage' / 'pause' / 'window', daysLeft, leadId, partnerId, variant2, variant3, chance, recallError } или null, nextOfferDay }` |
+| `selectEpilogue(s): EpilogueView` | эпилог «Рассекречивание» (§9.10): `yearsLater`, `lines[]` (`{ key, values }`, только ненулевые), `verdict` (`'church'`, `'reform'`, `'gray'`, `'heavy_memory'`, `'exemplary'`), `hiddenSins`, `revealed`, `election: { result, meddling }` или `null` (партия кончилась до выборов), `history` |
 | `selectLog(s, limit)` | лента событий (новые сверху) |
 | `selectOutcome(s)`, `selectVictoryProgress(s)` | итог партии и прогресс путей победы; `holdDays` у «1984», «Тени» и «Кардинала» (удержание `CARDINAL_HOLD_DAYS`, D-050) |
 
@@ -94,14 +99,22 @@ const loaded = deserialize(json);                  // с миграцией sche
 
 ## Журнал, события, квесты
 
-- `s.log` хранит последние 200 записей вида `LogEntry { id, day, kind, data, source }`. Список `kind` лежит в `LOG_KINDS`; новые виды, для которых в контенте ещё нет текста, — в `PENDING_LOG_KINDS` (сейчас пуст). Тексты к ним пишет контент (`EventTextSchema`, подстановка через `formatEventText`). У действий соперников `source` — это id соперника или `'unknown'`.
+- `s.log` хранит последние 200 записей вида `LogEntry { id, day, kind, data, source }`. Список `kind` лежит в `LOG_KINDS`; новые виды, для которых в контенте ещё нет текста, — в `PENDING_LOG_KINDS` (сейчас пуст) и `DILEMMA_LOG_KINDS` (дилеммы, линейка, выборы D-067; тексты напишет content-writer и перенесёт их в `LOG_KINDS`). У `lobby` есть `data.backfire`, у `intercept` — `data.risk` (сработал ли риск, по тому же броску). Тексты к ним пишет контент (`EventTextSchema`, подстановка через `formatEventText`). У действий соперников `source` — это id соперника или `'unknown'`.
+- Итог операции — записи `op_success` / `op_fail`. Форма `data` описана типом `OpResultLogData` (`entry.data as unknown as OpResultLogData`):
+  - всегда: `opId`, `type` (`OpType`), `caseId` (`number | null`), `chance` (0..1);
+  - операция по делу: `stateId`, `caseKind` (`'regular' | 'terror'`), `difficulty`, `caseTag` (метка дела §9.8: `'sting' | 'signal' | 'real_culprit' | 'source'`; у дела без метки поля нет);
+  - операция с целью (внедрение, слежка): `targetKind` (`'rival' | 'leader' | 'senator' | 'president'`) и `targetId` (нет у `'president'`);
+  - последствия — разница «после − до» за разрешение этой операции, округлена до сотых, нулевые поля не пишутся: `budgetDelta`, `planPointsDelta`, `reputationDelta`, `influenceDelta`, `exposureDelta`, `investigationDelta` («Под следствием»), `kompromatOnPlayerDelta` (компромат соперников на игрока, сумма), `kompromatGained` (число новых предметов компромата игрока, включая «Случайную находку»);
+  - судьба команды: `killedAgentIds`, `capturedAgentIds` — id через запятую (`"12,15"`), только если не пусто. По каждому агенту есть и отдельные записи `agent_killed` / `agent_captured`.
+  - Повышение полномочий в штате от громких дел пишется отдельно (`jurisdiction_up`), уход дела сопернику — `case_lost`; в `data` итога они не дублируются. Цена операции списывается при старте и в `budgetDelta` не входит.
 - Квесты (§9) — это `s.quests: QuestSession[]`. Ядро открывает сессии (триггеры §9.5–9.6, просьба о прибавке, двойной агент, аэропорт, повторная вербовка источника `recruit_retry` с выбором `money`/`ideology`/`kompromat`), отдаёт выборы `questChoices(s, session)` и применяет выбор по `questChoice`. Тексты и сцены — в Ink. Адаптер Ink регистрирует внешние функции из `INK_EXTERNAL_FUNCTIONS` (`core_var`, `core_can`, `core_choose`), читает `inkVariables(s, session)` и сохраняет состояние сценария через `setInkState(s, id, json)`.
-- `autoChoice(s, session)` выбирает первый доступный вариант (для `recruit_retry` — прежний способ, иначе `RECRUIT_FALLBACK_ORDER`, D-042). Нужен симулятору и тестам.
+- **Дилеммы и линейка (D-067)** — те же квест-сессии с `questId` из `DILEMMA_QUEST_IDS` (`dilemma_*`, `vanguard_*`). Набор и порядок выборов — `DILEMMA_CHOICE_IDS`, вариант 0 — «по умолчанию». У `QuestChoice` появились `dirty?: true` (грязный вариант: `dirtyActions` +1, «Под следствием» +1, закрывает «Чистые руки»), `risk?: 'low' | 'medium' | 'high'` (скрытый шанс отдаётся **только меткой**) и `chance?` (точный шанс этапа линейки — его ГДД велит показывать). Окна модальные (`isModalQuest`), кроме итога линейки `vanguard_result`. Выбор ведущего и напарника линейки идёт через `needsAgent`/`agentIds` (ведущему подходят только агенты с навыком ≥ 7). В `inkVariables` для этих окон есть `risk_<choiceId>`, `chance_<choiceId>` (проценты, −1 — нет), `dirty_<choiceId>`, `line_*`, `source_*`, `election_meddling`. Скрытые броски (реальность сигнала, ложность признания) в `params` не попадают. Дилемма, сгоревшая до открытия окна (условие фазы, отмена, провал, фаза не достигнута), игроку не видна и возвращает глобальный откат и повтор (D-069); в журнале — `dilemma_burned`.
+- `autoChoice(s, session)` выбирает первый доступный вариант (у дилемм это вариант 0) (для `recruit_retry` — прежний способ, иначе `RECRUIT_FALLBACK_ORDER`, D-042). Нужен симулятору и тестам.
 - **Контракт выбора агента и компромата: выбирает UI, не Ink.** Выборы, которым нужен агент (`hearings.scapegoat`, `union_meeting.infiltrate`, см. `QUEST_AGENT_CHOICES`), приходят из `questChoices` с `needsAgent: true` и списком свободных `agentIds`. Выборы, которые тратят компромат (`blogger_docs.discredit`, `informant.kompromat`, `journalist.discredit`, см. `QUEST_KOMPROMAT_CHOICES`), приходят с `needsKompromat: true` и `kompromatIds`. UI показывает список и передаёт выбранный id как `param` в `questChoice`. Ink вызывает `core_choose(choiceId, -1)`: значение `-1` (или отсутствие `param`) означает «выбор за ядром» — первый свободный агент или первый действующий компромат. Неподходящий `param` отклоняется кодом `agent_busy` или `kompromat_not_found`; для проверки без применения есть `questChoiceError(s, session, choiceId, param)`.
 
 ## Контент
 
-Из `index.ts` экспортируются `ContentBundleSchema`, `contentToConfig`, `formatEventText`, `INK_EXTERNAL_FUNCTIONS` и типы `ContentBundle`, `InkExternalName`. Остальные схемы лежат в `content-schema.ts`: `TraitContentSchema`, `ChanceCardContentSchema`, `AgentNamesSchema`, `LeaderNamesSchema`, `EventTextSchema`, `CaseTextSchema`, `StateContentSchema`, `SenatorContentSchema` (`resistance` — опционально), `CountryContentSchema`, `QuestContentSchema`. Тексты экранов, которые ядро не читает, — `RivalContentSchema` (досье), `EndingTextSchema` (финалы по кодам `results`), `OperationTextSchema`, `TechContentSchema`, `NewsItemSchema`. Они входят в пакет как **опциональные** разделы `rivals`, `endings`, `operations`, `techs`, `news`.
+Из `index.ts` экспортируются `ContentBundleSchema`, `contentToConfig`, `formatEventText`, `INK_EXTERNAL_FUNCTIONS` и типы `ContentBundle`, `InkExternalName`. Остальные схемы лежат в `content-schema.ts`: `TraitContentSchema`, `ChanceCardContentSchema`, `AgentNamesSchema`, `LeaderNamesSchema`, `EventTextSchema`, `CaseTextSchema`, `StateContentSchema`, `SenatorContentSchema` (`resistance` — опционально), `CountryContentSchema`, `QuestContentSchema`. Тексты экранов, которые ядро не читает, — `DilemmaDefSchema` (окно дилеммы или этапа линейки: `questId`, `title`, `body`, `realCase?`, `choices[{ id, label, argument, outcome }]`; id сверяются с `DILEMMA_CHOICE_IDS`), `LineDefSchema` (линейка: этапы и развязки), `EpilogueTextSchema` (строки, 5 вердиктов, 6 абзацев о выборах), `RivalContentSchema` (досье), `EndingTextSchema` (финалы по кодам `results`), `OperationTextSchema`, `TechContentSchema`, `NewsItemSchema`. Они входят в пакет как **опциональные** разделы `rivals`, `endings`, `operations`, `techs`, `news`, `dilemmas`, `line`, `epilogue`. `QuestContentSchema.questId` принимает `ALL_QUEST_IDS` (`QUEST_IDS` + `DILEMMA_QUEST_IDS`). Модификатор шанса у трейта (`opChance`) только ≥ 0 (D-066). У `CaseTextSchema` обязательны `success[]` и `fail[]` (развязки дела).
 Для встроенных трейтов и карточек контент даёт только тексты. Новые задают `mechanics` из закрытого набора модификаторов, эффектов и требований (`TraitModifier`, `CardEffect`, `CardRequirement`). `contentToConfig(bundle)` превращает механику в `config` для `createGame`. Механика сохраняется в state, поэтому сейв детерминирован независимо от версии контента.
 
 ## Баланс и симулятор
@@ -114,7 +127,7 @@ const loaded = deserialize(json);                  // с миграцией sche
 
 | Файл | Содержимое |
 |---|---|
-| `balance.ts` | `BALANCE` — 421 константа Приложения A (включая `TECH_TREE`, `REPR_REQUIREMENTS` в формате A.0) |
+| `balance.ts` | `BALANCE` — 480 констант Приложения A (включая `TECH_TREE`, `REPR_REQUIREMENTS` в формате A.0) |
 | `types.ts` | `GameState` и все сущности (§11.3), `LOG_KINDS` |
 | `rng.ts` | sfc32 + cyrb128, `roll/randInt/randFloat/pickWeighted/shuffle` (§0) |
 | `formulas.ts` | все формулы ГДД как чистые функции |
@@ -130,6 +143,9 @@ const loaded = deserialize(json);                  // с миграцией sche
 | `ai/strategy.ts`, `ai/actions.ts` | ИИ соперников: стратегия от `RivalView` и исполнение действий |
 | `cards.ts` | карточки шанса |
 | `quest-core.ts`, `quests.ts` | точки входа квестов, выборы, таймеры этапов, переменные Ink |
+| `dilemmas.ts`, `dilemma-state.ts` | дилеммы операций и их фазы, «Тихий сигнал», «Ценный источник», отложенные последствия `delayed[]`, выборы §9.7 |
+| `line.ts` | линейка «Народный авангард» §9.9 |
+| `epilogue.ts` | эпилог «Рассекречивание» §9.10 |
 | `actions.ts` | `applyAction` / `validateAction` |
 | `victory.ts` | 5 путей победы, поражения, тайм-аут |
 | `selectors.ts` | селекторы для UI |
@@ -137,8 +153,8 @@ const loaded = deserialize(json);                  // с миграцией sche
 
 ## Что упрощено в v1
 
-- Мини-игры детектива (§9.2) и допроса (§9.3) не реализованы: всегда работает обычный бросок §5.2.
-- Квест «Обмен пленными» (§9.1) не реализован: пойманный агент просто теряется.
+- Мини-игры детектива (§9.2) и допроса (§9.3) и квест «Обмен пленными» (§9.1) — после v1 (D-068): всегда работает обычный бросок §5.2, пойманный агент теряется. Ключи `DETECTIVE_*`, `INTERROGATION_*`, `PRISONER_EXCHANGE`, `EVIDENCE_SURV_BONUS_MIN_LEVEL` в `balance.ts` — резерв, ядро их не читает (кроме `formulas.goodBadCopAvailable`, которую никто не вызывает).
 - Svelte-адаптер (`adapter.svelte.ts`) не написан: ядро даёт `realtimeToDays` и `advance`, обёртку на `requestAnimationFrame` делает UI.
 - Бонус силы улики от Слежки ≥ 4 (D-045) применяется на старте допроса, а допроса в v1 нет; само поле `evidenceStrength` генерируется.
-- Открытых `TODO(gdd)` в коде нет: вопросы первой версии закрыты решениями D-037…D-047.
+- «Обмен пленными» для пленённого ведущего линейки тоже не реализован: агент теряется.
+- D-068 закрыл вопросы D-067: «Признание под давлением» открывается по `p_shown < 0.6`; дело-провокация (`tag = 'sting'`) доступно при частичных полномочиях, а дилемма «Провокация» требует полномочий в штате дела ≥ 1 (при старте и на фазе `mid`); «Двойная жизнь агента» бросается и при провале «Внедрения» с «Разрешить», и при переходе к врагу, раскрытии крота и раскрытии на саботаже; ведущий линейки выбыл не по линейке — **срыв** (`vanguard_result.params.outcome = 'fail_broken'`, журнал `line_failed` с `outcome: 'broken'`); напарник выбыл — линейка идёт без него; `turned` — лояльность −10, как `fled`; «Тихий сигнал» не подчиняется повтору 180 (`DL_SIGNAL.repeatCooldownDays`).

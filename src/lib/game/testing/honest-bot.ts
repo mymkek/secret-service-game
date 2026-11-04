@@ -5,7 +5,7 @@ import { applyAction, validateAction, type PlayerAction } from '../actions';
 import { agentSalary, autoPickPerk } from '../agents';
 import { autoChoice, questChoices } from '../quests';
 import { selectCases, selectForecast } from '../selectors';
-import { computeOpChance, primarySkill } from '../ops';
+import { computeOpShownChance, primarySkill } from '../ops';
 import type { DeptKey, GameState, QuestId, QuestSession } from '../types';
 
 function tryDo(s: GameState, a: PlayerAction): boolean {
@@ -39,7 +39,8 @@ const DIRTY_CHOICES: Partial<Record<QuestId, string[]>> = {
 
 /** Честный выбор: по предпочтениям, иначе первый доступный не грязный. null — оставить открытым. */
 export function honestChoice(s: GameState, q: QuestSession): string | null {
-	const avail = questChoices(s, q).filter((c) => c.available).map((c) => c.id);
+	// Грязные варианты дилемм и линейки (§9.8, §9.9) помечены dirty — честный бот их не берёт.
+	const avail = questChoices(s, q).filter((c) => c.available && !c.dirty).map((c) => c.id);
 	for (const id of HONEST_PREFS[q.questId] ?? []) if (avail.includes(id)) return id;
 	const dirty = DIRTY_CHOICES[q.questId] ?? [];
 	return avail.find((id) => !dirty.includes(id) && !id.startsWith('give:')) ?? null;
@@ -74,7 +75,7 @@ export function honestBotTurn(s: GameState): void {
 			.sort((x, y) => primarySkill(y, type) - primarySkill(x, type) || x.id - y.id);
 		if (idle.length < need || s.budget < B.OP_COST[type] + reserve) continue;
 		const team = idle.slice(0, need);
-		if (type === 'terror' && computeOpChance(s, { type, difficulty: c.difficulty, target: null, team }) < HONEST_TERROR_MIN_CHANCE) continue;
+		if (type === 'terror' && computeOpShownChance(s, { type, difficulty: c.difficulty, target: null, team }) < HONEST_TERROR_MIN_CHANCE) continue;
 		tryDo(s, { type: 'startOp', opType: type, caseId: c.id, agentIds: team.map((a) => a.id) });
 	}
 	// Найм — с оглядкой на план (§5.5: каждый агент поднимает цель плана на PLAN_PER_AGENT·3 за квартал):

@@ -173,7 +173,8 @@ export function generateAgent(s: GameState, opt: GenOptions): Agent {
 		legend: null,
 		legendBonus: false,
 		lastMedalDay: null,
-		hiredDay: s.day
+		hiredDay: s.day,
+		coverLife: false
 	};
 }
 

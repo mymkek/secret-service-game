@@ -86,9 +86,22 @@ export class InkQuest {
 		this.choices = this.story.currentChoices.map((c) => ({
 			index: c.index,
 			text: c.text,
-			core: core.find((x) => this.labels[x.id] !== undefined && this.labels[x.id].trim() === c.text.trim()) ?? null
+			core: this.matchCore(core, c.text)
 		}));
 		this.ended = this.choices.length === 0 && !this.story.canContinue;
+	}
+
+	/**
+	 * Сопоставление кнопки Ink с выбором ядра: точное по подписи, иначе по началу до « (». У дилемм подпись
+	 * в Ink дополняется живыми числами и метками («… (бесплатно; риск: средний)»), а в данных стоит краткая.
+	 */
+	private matchCore(core: QuestChoice[], text: string): QuestChoice | null {
+		const t = text.trim();
+		const exact = core.find((x) => this.labels[x.id] !== undefined && this.labels[x.id].trim() === t);
+		if (exact) return exact;
+		const head = (v: string) => v.trim().split(' (')[0].trim();
+		const byHead = core.filter((x) => this.labels[x.id] !== undefined && head(this.labels[x.id]) === head(t));
+		return byHead.length === 1 ? byHead[0] : null;
 	}
 
 	/** Игрок нажал на выбор Ink. Возвращает зафиксированный core_choose (или null: выбор не дошёл до ядра). */

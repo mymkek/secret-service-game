@@ -6,13 +6,15 @@ import { absorbChance, monthOfDay } from './formulas';
 import { aiInterval } from './formulas';
 import { US_STATES, senatorIds } from './geo';
 import { emptyNetwork } from './networks';
+import { OP_DILEMMA_DEFAULTS, emptyDilemmas, emptyElection, emptyHistory } from './dilemma-state';
 import { randInt, seedRng } from './rng';
 import { recomputeControl } from './society';
 import type { AutopauseFlags, DeptKey, GameConfig, GameState, Jurisdiction, Network, Rival, Speed } from './types';
 import { RIVAL_IDS } from './types';
 
 /** Текущая версия схемы сохранения. Повышать при несовместимых изменениях GameState. */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 7;
+
 
 export interface NewGameOptions {
 	seed: string;
@@ -153,11 +155,18 @@ export function createGame(opts: NewGameOptions): GameState {
 			senatorQuestReadyDay: 0,
 			controlBonus: 0
 		},
+		dilemmas: emptyDilemmas(),
+		delayed: [],
+		valuableSource: null,
+		line: null,
+		lineNextOfferDay: 0,
+		election: emptyElection(),
+		history: emptyHistory(),
 		log: [],
 		outcome: { status: 'active', victoryPath: null, defeatReason: null, month: null, day: null, score: null }
 	};
 
-	// Стартовый состав: 4 новичка и 2 опытных, тем же генератором без трейтов (§4.2.2).
+	// Стартовый состав (START_ROSTER, D-066: 2 новичка и 2 опытных), тем же генератором без трейтов (§4.2.2).
 	const roster = B.START_ROSTER as Record<'novice' | 'experienced' | 'veteran', number>;
 	for (const rank of ['novice', 'experienced', 'veteran'] as const)
 		for (let i = 0; i < roster[rank]; i++) s.agents.push(generateAgent(s, { rank, traits: false }));
@@ -223,6 +232,38 @@ export const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => Record
 	4: (raw) => {
 		const r = raw as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 		if (typeof r.firstIncome !== 'number') r.firstIncome = createGame({ seed: String(r.seed), config: r.config ?? {} }).firstIncome;
+		return r;
+	},
+	// v5 → v6 (D-066, D-067): дилеммы, отложенные последствия, «Ценный источник», линейка, выборы, эпилог;
+	// новые поля дел, операций и агентов. Без RNG: всё по умолчанию, как в новой партии.
+	// Состав и команды старого сейва не трогаем: команда больше трёх доигрывает как есть (D-066 меняет
+	// только правила набора новых команд), шанс идущих операций пересчитается по новым правилам §5.2.
+	5: (raw) => {
+		const r = raw as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+		r.dilemmas = r.dilemmas ?? emptyDilemmas();
+		r.delayed = r.delayed ?? [];
+		r.valuableSource = r.valuableSource ?? null;
+		r.line = r.line ?? null;
+		r.lineNextOfferDay = r.lineNextOfferDay ?? 0;
+		r.election = r.election ?? emptyElection();
+		r.history = { ...emptyHistory(), ...(r.history ?? {}) };
+		for (const c of r.cases ?? []) {
+			if (c.tag === undefined) c.tag = null;
+			if (c.signalRef === undefined) c.signalRef = null;
+		}
+		for (const op of r.operations ?? []) Object.assign(op, { ...OP_DILEMMA_DEFAULTS, ...op });
+		for (const a of [...(r.agents ?? []), ...(r.hirePool ?? [])]) if (a.coverLife === undefined) a.coverLife = false;
+		for (const d of r.defectors ?? []) if (d.agent && d.agent.coverLife === undefined) d.agent.coverLife = false;
+		return r;
+	},
+	// v6 → v7 (D-069): у ждущих дилемм assignedDay и prevLastDay. День назначения старых записей
+	// неизвестен, поэтому assignedDay = null: сгорев, они откаты не возвращают (как было до D-069).
+	6: (raw) => {
+		const r = raw as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+		for (const p of r.dilemmas?.pending ?? []) {
+			if (p.assignedDay === undefined) p.assignedDay = null;
+			if (p.prevLastDay === undefined) p.prevLastDay = null;
+		}
 		return r;
 	}
 };

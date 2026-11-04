@@ -45,6 +45,12 @@ export function autopause(s: GameState, key: AutopauseKey): void {
 	if (!s.pauseReasons.includes(key)) s.pauseReasons.push(key);
 }
 
+/** Пауза, которую нельзя отключить настройками (модальные окна дилемм, §3.4, §9.8). */
+export function forcePause(s: GameState, key: AutopauseKey): void {
+	s.paused = true;
+	if (!s.pauseReasons.includes(key)) s.pauseReasons.push(key);
+}
+
 // ------------------------------------------------------------ доступ
 
 export function dept(s: GameState, key: DeptKey): number {
@@ -196,6 +202,8 @@ export function removeAgent(s: GameState, agentId: number): Agent | undefined {
 export function setIdle(a: Agent): void {
 	a.status = 'idle';
 	a.location = null;
+	// §9.8: «личная жизнь под легендой» существует только пока агент внедрён.
+	a.coverLife = false;
 }
 
 // ------------------------------------------------------------ исход партии

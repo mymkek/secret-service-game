@@ -17,4 +17,4 @@
 	$effect(() => untrack(() => game.pause()));
 </script>
 
-<iframe title="Правила игры" {srcdoc} class="h-[calc(100vh-9rem)] w-full rounded-lg border border-line bg-white"></iframe>
+<iframe title="Правила игры" {srcdoc} class="h-[calc(100vh-9rem)] w-full rounded-lg border border-white/10 bg-white"></iframe>

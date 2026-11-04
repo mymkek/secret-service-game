@@ -16,11 +16,13 @@ import {
 import { hasOpenQuest, openQuest } from './quest-core';
 import { spawnLeader } from './society';
 import { pickOne, randInt, roll } from './rng';
+import { leaveCoverLife } from './dilemma-state';
 import type { Agent, GameState } from './types';
 
 /** Переход агента к врагу (§4.2.7). */
 export function defect(s: GameState, a: Agent): void {
 	const countryId = a.location && 'countryId' in a.location ? a.location.countryId : null;
+	leaveCoverLife(s, a); // §9.8 (а): переход к врагу рушит легенду внедрённого
 	removeAgent(s, a.id);
 	const r = pickOne(s, aliveRivals(s));
 	if (r) addKompromatOnPlayer(s, r.id, B.DEFECTOR_KOMPROMAT);
@@ -84,6 +86,7 @@ export function monthEndPersonnel(s: GameState, paid: boolean): void {
 			if (r?.alive) r.kompromatOnPlayer += 1;
 		}
 		if (roll(s, B.MOLE_PASSIVE_DETECT_PER_CI * dept(s, 'counterintel'))) {
+			leaveCoverLife(s, a); // §9.8 (а): крот раскрыт
 			removeAgent(s, a.id);
 			log(s, 'mole_found', { agentId: a.id, rivalId: a.moleFor });
 			autopause(s, 'moleFound');

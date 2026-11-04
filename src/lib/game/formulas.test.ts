@@ -126,22 +126,51 @@ describe('§4 персонал и развитие', () => {
 });
 
 describe('§5.2 шанс операции', () => {
-	it('пример месяца 1 из ГДД = 0.52', () => {
-		// опытный (навык 5, уровень 2) + новичок (уровень 1), d3, Аналитика 1
-		const p = F.opSuccessChance({ type: 'investigation', difficulty: 3, teamSkill: 5, teamLevel: 1.5, extra: 0, deptLevel: 1, bonus: 0, hasMole: false });
-		expect(p).toBeCloseTo(0.52, 10);
+	// Примеры §5.2 (D-066), месяц 1, Аналитика 1 / Оперативный 1.
+	const inv = { type: 'investigation' as const, difficulty: 3, teamSkill: 5, teamLevel: 2, reinforce: 0, deptLevel: 1, bonus: 0, hasMole: false };
+	it('опытный один на d3 = 0.53; с новичком 0.59; втроём 0.63', () => {
+		expect(F.opSuccessChance(inv)).toBeCloseTo(0.53, 10);
+		expect(F.opSuccessChance({ ...inv, reinforce: F.reinforceBonus([false]) })).toBeCloseTo(0.59, 10);
+		expect(F.opSuccessChance({ ...inv, reinforce: F.reinforceBonus([false, false]) })).toBeCloseTo(0.63, 10);
 	});
-	it('подкрепление, крот, кламп', () => {
-		const base = { type: 'terror' as const, difficulty: 3, teamSkill: 5, teamLevel: 1, extra: 0, deptLevel: 0, bonus: 0, hasMole: false };
-		expect(F.opSuccessChance({ ...base, extra: 1.5 })).toBeCloseTo(0.4 - 0.12 + 0.06);
+	it('новичок один на d1 = 0.55', () => {
+		expect(F.opSuccessChance({ ...inv, difficulty: 1, teamSkill: 3, teamLevel: 1 })).toBeCloseTo(0.55, 10);
+	});
+	it('теракт d4: опытный один 0.31, вдвоём 0.37, втроём 0.41', () => {
+		const t = { type: 'terror' as const, difficulty: 4, teamSkill: 6, teamLevel: 2, reinforce: 0, deptLevel: 1, bonus: 0, hasMole: false };
+		expect(F.opSuccessChance(t)).toBeCloseTo(0.31, 10);
+		expect(F.opSuccessChance({ ...t, reinforce: F.reinforceBonus([false]) })).toBeCloseTo(0.37, 10);
+		expect(F.opSuccessChance({ ...t, reinforce: F.reinforceBonus([false, false]) })).toBeCloseTo(0.41, 10);
+	});
+	it('слоты подкрепления: [0.06, 0.04], поздний ×0.5, сверх двух — ничего', () => {
+		expect(F.reinforceBonus([])).toBe(0);
+		expect(F.reinforceBonus([false, true])).toBeCloseTo(0.08, 10); // пример §5.2: третий пришёл на 60 %
+		expect(F.reinforceBonus([true, true])).toBeCloseTo(0.05, 10);
+		expect(F.reinforceBonus([false, false, false])).toBeCloseTo(0.1, 10);
+	});
+	it('крот только в p, не в p_shown; кламп', () => {
+		const base = { type: 'terror' as const, difficulty: 3, teamSkill: 5, teamLevel: 1, reinforce: 0, deptLevel: 0, bonus: 0, hasMole: false };
+		expect(F.opShownChance(base)).toBeCloseTo(0.28);
 		expect(F.opSuccessChance({ ...base, hasMole: true })).toBeCloseTo(0.18);
+		expect(F.opRollChance(F.opShownChance(base), true)).toBeCloseTo(0.18);
+		expect(F.opRollChance(0.07, true)).toBe(B.OP_CHANCE_MIN);
 		expect(F.opSuccessChance({ ...base, teamSkill: 1, difficulty: 5 })).toBe(B.OP_CHANCE_MIN);
 		expect(F.opSuccessChance({ ...base, teamSkill: 10, deptLevel: 5, bonus: 0.5 })).toBe(B.OP_CHANCE_MAX);
 	});
-	it('гибель при провале теракта', () => {
+	it('гибель при провале теракта и «прикрытие» (D-066)', () => {
 		expect(F.terrorDeathChance(5, false)).toBeCloseTo(0.15);
 		expect(F.terrorDeathChance(10, true)).toBeCloseTo(0.03);
 		expect(F.terrorDeathChance(1, false)).toBeCloseTo(0.23);
+		// Примеры §5.2: опытный (бой 6) один 0.13; вдвоём с новичком (бой 2) 0.08 / 0.16; втроём 0.03 / 0.11.
+		expect(F.terrorDeathChance(6, false, 1)).toBeCloseTo(0.13);
+		expect(F.terrorDeathChance(6, false, 2)).toBeCloseTo(0.08);
+		expect(F.terrorDeathChance(2, false, 2)).toBeCloseTo(0.16);
+		expect(F.terrorDeathChance(6, false, 3)).toBeCloseTo(0.03);
+		expect(F.terrorDeathChance(2, false, 3)).toBeCloseTo(0.11);
+	});
+	it('«Хороший/плохой коп» — только при ≥ 2 агентах', () => {
+		expect(F.goodBadCopAvailable(1)).toBe(false);
+		expect(F.goodBadCopAvailable(2)).toBe(true);
 	});
 	it('награды и длительности', () => {
 		expect(F.opReward('investigation', 3, 1)).toBe(65);

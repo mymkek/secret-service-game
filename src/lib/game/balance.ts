@@ -31,8 +31,8 @@ export const BALANCE = {
 	START_EXPOSURE: 10,
 	/** шк. — §2.1 */
 	START_UNREST: 15,
-	/** чел. — §4.2.2 */
-	START_ROSTER: {"novice":4,"experienced":2,"veteran":0},
+	/** чел. — §4.2.2, §10.1; было 4/2/0 до D-066 */
+	START_ROSTER: {"novice":2,"experienced":2,"veteran":0},
 	/** ур. — §4.1 */
 	START_DEPARTMENTS: {"analytics":1,"operations":1,"cyber":0,"counterintel":0,"pr":0,"legal":0},
 	/** штаты — §6.7 */
@@ -99,7 +99,7 @@ export const BALANCE = {
 	/** дней — §2.5 */
 	KOMPROMAT_TTL_DAYS: 360,
 	/** шк. — §4.3, §8.5 */
-	ILLEGAL_TARGET_EXPOSURE: 12,
+	ILLEGAL_TARGET_EXPOSURE: 15,
 	/** шк./мес/ур — §2.4 */
 	NET_INFLUENCE_PER_LEVEL: 0.2,
 	// A.4 Экономика
@@ -236,7 +236,7 @@ export const BALANCE = {
 	/** навык — §4.2.3 */
 	SKILL_MAX: 10,
 	/** разн. — §4.2.3 */
-	PERK_EFFECTS: {"cold_blooded":{"borderFail":-0.05,"infiltrate":0.05},"marksman":{"terror":0.05,"death":-0.05},"analyst":{"investigation":0.05},"ghost":{"exposureMult":0.5},"mentor":{"teamXpMult":1.5},"iron_will":{"loyaltyFloor":40},"negotiator":{"interrogation":0.1},"netrunner":{"surveillance":0.05}},
+	PERK_EFFECTS: {"cold_blooded":{"borderFail":-0.05,"infiltrate":0.05},"marksman":{"terror":0.05,"death":-0.05},"analyst":{"investigation":0.05},"ghost":{"exposureMult":0.5},"mentor":{"teamXpMult":1.5},"iron_will":{"loyaltyFloor":40},"negotiator":{"recruit":0.1,"interrogation":0.1},"netrunner":{"surveillance":0.05}},
 	/** дней — §4.2.4 */
 	TRAINING_SKILL_DAYS: 20,
 	/** k$ — §4.2.4 */
@@ -308,8 +308,8 @@ export const BALANCE = {
 	// A.7 Операции, дела, план
 	/** k$ — §5.1 */
 	OP_COST: {"investigation":30,"terror":100,"infiltration":60,"surveillance":25},
-	/** чел. — §5.1 */
-	OP_AGENTS_REQUIRED: {"investigation":2,"terror":4,"infiltration":1,"surveillance":1},
+	/** чел. — §5.1, §5.2; было 2/4/1/1 до D-066 */
+	OP_AGENTS_REQUIRED: {"investigation":1,"terror":1,"infiltration":1,"surveillance":1},
 	/** дней — §5.1 */
 	OP_DURATION_DAYS: {"investigation":30,"terror":30,"infiltration":40,"surveillance":15},
 	/** вер. — §5.2 */
@@ -318,7 +318,7 @@ export const BALANCE = {
 	OP_DEPT: {"investigation":"analytics","terror":"operations","infiltration":"counterintel","surveillance":"cyber"},
 	/** — — §5.2 (max из списка) */
 	OP_PRIMARY_SKILL: {"investigation":["interrogation","surveillance"],"terror":["combat"],"infiltration":["surveillance"],"surveillance":["surveillance","hacking"]},
-	/** чел. — §5.1 */
+	/** чел. — §5.1, §5.2; должно равняться длине OP_REINFORCE_BONUS_BY_SLOT */
 	OP_MAX_EXTRA_AGENTS: 2,
 	/** вер./навык — §5.2 */
 	OP_SKILL_COEF: 0.04,
@@ -326,11 +326,11 @@ export const BALANCE = {
 	OP_SKILL_PIVOT: 5,
 	/** вер./ур — §5.2 */
 	OP_DEPT_COEF: 0.03,
-	/** вер./ур — §5.2 */
+	/** вер./ур — §5.2; применяется к максимальному уровню команды (было: к среднему, D-066) */
 	OP_LEVEL_COEF: 0.02,
-	/** вер./чел — §5.2 */
-	OP_REINFORCE_BONUS: 0.04,
-	/** множ. — §5.2 */
+	/** вер. (слот подкрепления 1, 2) — §5.2; заменяет OP_REINFORCE_BONUS = 0.04 (D-066) */
+	OP_REINFORCE_BONUS_BY_SLOT: [0.06,0.04],
+	/** множ. — §5.2 (к слоту агента, присоединившегося после 50 % срока) */
 	OP_LATE_REINFORCE_FACTOR: 0.5,
 	/** вер./ур — §5.2 */
 	OP_DIFFICULTY_COEF: 0.06,
@@ -368,8 +368,8 @@ export const BALANCE = {
 	OP_TERROR_REWARD_PER_DIFF: 30,
 	/** шк. — §5.3 */
 	OP_TERROR_FAIL_EXPOSURE: 8,
-	/** вер. — §5.3 */
-	OP_TERROR_DEATH: {"base":0.15,"perCombat":0.02,"min":0.03,"max":0.25},
+	/** вер. — §5.3; coverPerAgent — «прикрытие», за каждого другого агента команды (D-066) */
+	OP_TERROR_DEATH: {"base":0.15,"perCombat":0.02,"coverPerAgent":0.05,"min":0.03,"max":0.25},
 	/** разн. — §5.3 */
 	OP_INFILTRATION_FAIL: {"exposure":5,"lossChance":0.5,"loyalty":-10,"rivalKompromat":1},
 	/** вер./мес — §5.3 */
@@ -420,8 +420,8 @@ export const BALANCE = {
 	PLAN_MIN: 4,
 	/** очк. — §5.5 */
 	PLAN_FIRST_QUARTER: 4,
-	/** очк./кварт. (годы 1..5) — §5.5 */
-	PLAN_BASE_BY_YEAR: [6,9,11,13,15],
+	/** очк./кварт. (годы 1..5) — §5.5, §10.1; было [6, 9, 11, 13, 15] до D-066 */
+	PLAN_BASE_BY_YEAR: [7,11,13,15,17],
 	/** шк. — §5.5 */
 	PLAN_OVER_REP: 3,
 	/** шк. — §5.5 */
@@ -482,7 +482,7 @@ export const BALANCE = {
 	/** дней — §4.3 */
 	WARRANT_MIN_DAYS: 2,
 	/** k$ — §4.4.1 */
-	REPR_COST_BY_LEVEL: [80,160,240,320,400,480,560],
+	REPR_COST_BY_LEVEL: [180,360,540,720,900,1080,1260],
 	/** дней — §4.4.1 */
 	REPR_BUILD_DAYS: 15,
 	/** k$/мес/ур — §4.4.1 */
@@ -666,7 +666,7 @@ export const BALANCE = {
 	/** вер./мес/ур — §6.4 */
 	MOLE_PASSIVE_DETECT_PER_CI: 0.05,
 	/** разн. — §6.3 */
-	ACT_LEAK: {"cost":30,"repPerStrength":-3.5,"exposure":3,"revealBase":0.2,"revealMin":0.05,"revealRep":-5,"revealExposure":8,"grudgeDays":90},
+	ACT_LEAK: {"cost":30,"repPerStrength":-3,"exposure":3,"revealBase":0.2,"revealMin":0.05,"revealRep":-5,"revealExposure":8,"grudgeDays":90},
 	/** разн. — §6.3 */
 	ACT_INTERCEPT: {"cost":20,"influence":5,"targetPlan":-0.03,"riskChance":0.15,"riskInfluence":-5,"grudgeDays":90},
 	/** разн. — §6.3 */
@@ -728,7 +728,7 @@ export const BALANCE = {
 	/** ур. — §9.1 */
 	NET_MAX_LEVEL: 5,
 	/** прогр./мес — §9.1 */
-	NET_PROGRESS_PER_AGENT: 0.28,
+	NET_PROGRESS_PER_AGENT: 0.18,
 	/** доля/навык — §9.1 */
 	NET_SKILL_COEF: 0.05,
 	/** прогр.×(ур+1) — §9.1 */
@@ -845,13 +845,13 @@ export const BALANCE = {
 	/** — — §8 */
 	VICTORY_PRIORITY: ["monopoly","cardinal","shadow","1984","clean"],
 	/** дней — §8.1 */
-	VICTORY_1984_HOLD_DAYS: 360,
+	VICTORY_1984_HOLD_DAYS: 540,
 	/** шк. — §8.1 */
 	VICTORY_1984_CONTROL: 100,
 	/** ур. — §8.2 */
 	SHADOW_NETWORK_LEVEL: 4,
 	/** дней — §8.2 */
-	SHADOW_HOLD_DAYS: 180,
+	SHADOW_HOLD_DAYS: 270,
 	/** кварт. — §8.4 */
 	CLEAN_MIN_QUARTERS_MET: 19,
 	/** шк. — §8.4 */
@@ -893,6 +893,93 @@ export const BALANCE = {
 	AUTOPAUSE_DEFAULTS: {"chanceCard":true,"quarterReport":true,"hearings":true,"questChoice":true,"election":true,"outcome":true,"agentDefected":true,"networkFailed":true,"moleFound":true,"unrestThreshold":true,"investigationThreshold":true,"firstNegativeBudget":true,"raiseRequest":true,"caseExpiring":false,"operationDone":false},
 	/** дней — §3.4 */
 	CASE_EXPIRING_WARN_DAYS: 3,
+	// A.15 Дилеммы, линейка «Народный авангард», эпилог (D-067)
+	/** вер./операцию — §9.8 */
+	DILEMMA_OP_CHANCE: 0.2,
+	/** дней — §9.8 */
+	DILEMMA_COOLDOWN_DAYS: 30,
+	/** дней — §9.8 */
+	DILEMMA_REPEAT_COOLDOWN_DAYS: 180,
+	/** вер. (границы «низкий / средний / высокий») — §9.8, UI */
+	DILEMMA_RISK_LABELS: [0.2,0.4],
+	/** — — §9.8 */
+	DILEMMA_OP_TYPE: {"valuable_source":"investigation","forced_confession":"investigation","sting":"investigation","share_with_cia":"terror","fudged_warrant":"surveillance","cover_life":"infiltration"},
+	/** — — §9.8 */
+	DILEMMA_PHASE: {"valuable_source":"end_success","forced_confession":"end_before_roll","sting":"mid","share_with_cia":"mid","fudged_warrant":"start","cover_life":"mid"},
+	/** вес — §9.8 */
+	DILEMMA_WEIGHTS: {"valuable_source":10,"forced_confession":10,"sting":10,"share_with_cia":10,"fudged_warrant":10,"cover_life":10},
+	/** разн. — §9.8 */
+	DL_VALUABLE_SOURCE: {"minDifficulty":3,"casesPerMonth":1,"crimeChance":0.12,"surrenderRep":-2,"blindEyeExposure":2,"exposeK":0.04,"exposeMax":0.3,"exposeRepPerCrime":-5,"exposeExposurePerCrime":6,"exposeInvestigationPerCrime":5},
+	/** разн. — §9.8 */
+	DL_FORCED_CONFESSION: {"minDifficulty":2,"maxChance":0.6,"falseChance":0.5,"delayDays":[60,180],"reviewChance":0.3,"reviewRep":-6,"reviewInvestigation":5,"dealRewardMult":0.5},
+	/** разн. — §9.8 */
+	DL_STING: {"maxDifficulty":3,"caseDifficulty":2,"timerDays":30,"chanceBonus":0.3,"rewardMult":0.5,"failRep":-3,"wouldntActChance":0.7,"judgeDelayDays":[90,270],"judgeChance":0.35,"judgeRep":-8,"judgeInvestigation":5},
+	/** разн. — §9.8 */
+	DL_SIGNAL: {"minMonth":3,"chancePerMonth":0.1,"repeatCooldownDays":0,"realChance":0.35,"attackDelayDays":[30,90],"attackRep":-8,"attackInfluence":-5,"caseDifficulty":3,"legalCatch":0.6,"dirtyMinCyber":1,"dirtyExposure":3,"dirtyCatch":0.9,"dirtyPlanPoints":1,"dirtyRep":2,"detainMinRepr":5,"detainUnrest":3,"detainExposure":3,"detainInnocentRep":-2},
+	/** разн. — §9.8 */
+	DL_SHARE_CIA: {"chanceBonus":0.12,"ciaPlan":0.1,"ciaRep":2,"favorHostility":-0.3,"favorDays":180},
+	/** разн. — §9.8 */
+	DL_FUDGED_WARRANT: {"minWarrantDays":4,"chanceBonus":0.05,"delayDays":[90,360],"caughtChance":0.25,"caughtInvestigation":8,"caughtRep":-4},
+	/** разн. — §9.8 */
+	DL_COVER_LIFE: {"forbidLoyalty":-5,"forbidChance":-0.05,"allowChance":0.08,"allowLoyalty":5,"embedDetectMult":0.5,"scandalChance":0.4,"scandalRep":-6,"scandalExposure":6},
+	/** разн. — §9.7, §9.8 */
+	DL_ELECTION_DOSSIER: {"monthOffset":-2,"publicAdminDelta":-0.15,"publicRep":-3,"publicInfluence":3,"leakAdminDelta":-0.1,"leakExposure":5,"leakRevealChance":0.3,"leakRevealInvestigation":10,"leakRevealRep":-8,"meddleWinPriority":1.15,"meddleLosePriority":0.85},
+	/** вер. — §9.7 */
+	ELECTION_CHANCE_MIN: 0.05,
+	/** вер. — §9.7 */
+	ELECTION_CHANCE_MAX: 0.95,
+	/** мес — §9.9 */
+	LINE_MIN_MONTH: 6,
+	/** вер./мес — §9.9 */
+	LINE_OFFER_CHANCE: 0.35,
+	/** дней — §9.9 */
+	LINE_COOLDOWN_DAYS: 360,
+	/** дней — §9.9 */
+	LINE_DECLINE_COOLDOWN_DAYS: 180,
+	/** навык — §9.9 */
+	LINE_MIN_SKILL: 7,
+	/** вер./навык — §9.9 */
+	LINE_SKILL_COEF: 0.04,
+	/** вер. — §9.9 */
+	LINE_PARTNER_BONUS: 0.08,
+	/** вер. — §9.9 */
+	LINE_COLD_BLOODED_BONUS: 0.05,
+	/** вер. — §9.9 */
+	LINE_CHANCE_MIN: 0.05,
+	/** вер. — §9.9 */
+	LINE_CHANCE_MAX: 0.95,
+	/** дней (этапы 1..4) — §9.9 */
+	LINE_STAGE_DAYS: [30,60,30,15],
+	/** дней — §9.9 */
+	LINE_PAUSE_DAYS: 20,
+	/** k$ (этапы 1..4) — §9.9 */
+	LINE_STAGE_COST: [80,60,60,0],
+	/** вер. — §9.9 */
+	LINE_STAGE_BASE: {"s1":0.85,"s2_cautious":0.8,"s2_devoted":0.92,"s3_evidence":0.75,"s3_provoke":0.9,"s4":0.9},
+	/** шк. — §9.9 */
+	LINE_DEVOTED_EXPOSURE: 2,
+	/** очк., k$ — §9.9 */
+	LINE_QUIET: {"plan":2,"money":150},
+	/** k$, очк., шк. — §9.9 */
+	LINE_REWARD_CLEAN: {"money":2500,"plan":6,"influence":8,"rep":6},
+	/** k$, очк., шк. — §9.9 */
+	LINE_REWARD_DIRTY: {"money":4000,"plan":9,"influence":12,"rep":10},
+	/** разн. — §9.9 */
+	LINE_PROVOKE: {"delayDays":[90,270],"exposeChance":0.4,"rep":-10,"investigation":10,"exposure":10},
+	/** шк. — §9.9 */
+	LINE_FAIL_EXPOSURE: 5,
+	/** вес — §9.9 */
+	LINE_FAIL_OUTCOMES: {"fled":50,"killed":20,"captured":15,"turned":15},
+	/** шк. — §9.9 */
+	LINE_FLED_LOYALTY: -10,
+	/** шк. — §9.9 */
+	LINE_KILLED_REP: -3,
+	/** вер. — §9.9 */
+	LINE_PARTNER_DEATH_CHANCE: 0.5,
+	/** лет (текст) — §9.10 */
+	EPILOGUE_YEARS_LATER: 25,
+	/** шт. — §9.10 */
+	EPILOGUE_VERDICT: {"reform":3,"church":8,"churchRevealed":2},
 };
 
 export type Balance = typeof BALANCE;

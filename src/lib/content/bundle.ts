@@ -3,6 +3,8 @@
 import { ContentBundleSchema } from '../game/content-schema';
 import chanceCards from './cards/chance.json';
 import { cases } from './cases';
+import { dilemmaDefs, lineDef } from './dilemma-texts';
+import { epilogueText } from './epilogue-texts';
 import { eventTexts } from './events';
 import { agentNames, leaderNames } from './names';
 import newsData from './news.json';
@@ -16,7 +18,11 @@ export interface QuestScript {
 	title: string;
 	/** Тексты по этапам сессии; 'choice' - основной экран выбора. */
 	stages: Record<string, string>;
-	choices: { id: string; label: string; outcome: string }[];
+	choices: { id: string; label: string; outcome: string; argument?: string }[];
+	/** Только для дилемм и линейки (D-067): сценарий Ink написан вручную, generate.mjs его не трогает. */
+	handwritten?: boolean;
+	/** «В реальности было похожее дело…» (окна дилемм). */
+	realCase?: string;
 }
 
 export const questScripts = questsData as unknown as Record<string, QuestScript>;
@@ -61,5 +67,8 @@ export const content = ContentBundleSchema.parse({
 	})),
 	operations: Object.entries(rawOpTexts).map(([opType, o]) => ({ opType, name: o.name, description: o.description })),
 	techs: Object.entries(rawTechNames).map(([id, t]) => ({ id, name: t.name, description: t.description })),
-	news: newsItems
+	news: newsItems,
+	dilemmas: dilemmaDefs,
+	line: lineDef,
+	epilogue: epilogueText
 });

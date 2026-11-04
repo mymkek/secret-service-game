@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { game } from './game.svelte';
-	import Modal from './Modal.svelte';
+	import { Modal, Illustration, Button } from './kit';
 	import SavesList from './SavesList.svelte';
 
 	let { onclose }: { onclose: () => void } = $props();
@@ -11,6 +11,7 @@
 </script>
 
 <Modal title="Меню" {onclose} wide>
+	{#snippet art()}<Illustration name="menu" size={152} />{/snippet}
 	<form
 		class="space-y-2"
 		onsubmit={async (e) => {
@@ -20,13 +21,13 @@
 	>
 		<div class="h2">Сохранить партию</div>
 		<div class="flex gap-2">
-			<input class="flex-1 rounded border border-line bg-bg px-2 py-1.5" bind:value={name} placeholder="Название сохранения" aria-label="Название сохранения" />
+			<input class="flex-1" bind:value={name} placeholder="Название сохранения" aria-label="Название сохранения" />
 			<button class="btn btn-gold" type="submit" disabled={game.busy}>{game.saveId ? 'Обновить сохранение' : 'Сохранить'}</button>
 		</div>
 		{#if game.saveId}
 			<button
 				type="button"
-				class="btn text-xs"
+				class="btn btn-sm"
 				disabled={game.busy}
 				onclick={async () => {
 					game.saveId = null;
@@ -38,11 +39,11 @@
 
 	<SavesList onloaded={onclose} />
 
-	<div class="space-y-2 border-t border-line pt-3">
+	<div class="space-y-2 border-t border-white/10 pt-3">
 		<div class="h2">Новая партия</div>
 		{#if confirmNew}
 			<div class="flex flex-wrap items-center gap-2">
-				<input class="rounded border border-line bg-bg px-2 py-1.5" bind:value={seed} placeholder="зерно (необязательно)" aria-label="Зерно новой партии" />
+				<input bind:value={seed} placeholder="зерно (необязательно)" aria-label="Зерно новой партии" />
 				<button
 					class="btn btn-danger"
 					onclick={() => {

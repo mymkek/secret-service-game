@@ -11,21 +11,22 @@ import {
 	addInfluence,
 	addInvestigation,
 	addReputation,
-	autopause,
 	dept,
+	forcePause,
 	isOver,
 	kompromatActive,
-	log,
 	month,
 	rival
 } from './effects';
 import { influenceDriftDelta, investigationDecay, isMonthEnd, reputationRevertDelta } from './formulas';
 import { monthEndNetworks, tickMissions } from './networks';
-import { completeDueOperations, dailyCases } from './ops';
+import { dailyCases } from './ops';
+import { blockingSession, completeDueOperations, monthEndSource, monthStartDilemmas, processDelayed, runElection, tickOpDilemmas } from './dilemmas';
+import { monthStartLineOffer, tickLine } from './line';
 import { monthEndPersonnel } from './personnel';
 import { monthEndQuestTriggers, tickQuests } from './quests';
 import { checkRivalCollapse, rivalMonthlyDrift } from './rivals';
-import { roll, shuffle, type RngHolder } from './rng';
+import type { RngHolder } from './rng';
 import { checkUnrestThresholds, monthEndExposure, monthEndSociety, recomputeControl } from './society';
 import { cardinalHoldStrike, checkOutcome, updateHoldCounters } from './victory';
 import type { GameState, LogEntry, Speed } from './types';
@@ -39,19 +40,6 @@ export interface StepOptions {
 	strategy?: RivalStrategy;
 }
 
-function runElection(s: GameState): void {
-	if (roll(s, B.ELECTION_NEW_ADMIN_CHANCE)) {
-		const mults = shuffle(s, B.ELECTION_PRIORITY_MULTS);
-		s.priorityMult = mults[0];
-		RIVAL_IDS.forEach((id, i) => (rival(s, id).priorityMult = mults[i + 1]));
-		addInfluence(s, s.influence * (B.ELECTION_INFLUENCE_MULT - 1));
-		s.presidentTerm += 1;
-		s.kompromat = s.kompromat.filter((k) => k.target.kind !== 'president');
-		log(s, 'election', { newAdmin: true, priorityMult: s.priorityMult });
-	} else log(s, 'election', { newAdmin: false });
-	autopause(s, 'election');
-}
-
 /** Шаг 7 дня: конец месяца. */
 function monthEnd(s: GameState): void {
 	const m = month(s);
@@ -63,6 +51,8 @@ function monthEnd(s: GameState): void {
 	monthEndSociety(s); // 7.6
 	if (isOver(s)) return;
 	monthEndNetworks(s); // 7.7
+	if (isOver(s)) return;
+	monthEndSource(s); // 7.7: «Ценный источник» (§9.8)
 	if (isOver(s)) return;
 	// 7.8 дрейф
 	let netSum = 0;
@@ -98,18 +88,27 @@ export function stepDay(s: GameState, opts: StepOptions = {}): void {
 	s.day += 1;
 	// 2 таймеры
 	tickAgentStreaks(s);
+	tickOpDilemmas(s); // операции: дилеммы фазы mid (§9.8)
 	tickTrainings(s);
 	tickBuilds(s);
 	tickResearch(s);
 	tickMissions(s);
 	tickTasks(s);
 	tickQuests(s);
+	tickLine(s); // этапы линейки (§9.9)
 	if (isOver(s)) return;
 	// 3 завершение операций
 	completeDueOperations(s);
 	if (isOver(s)) return;
-	// 4 дела
-	dailyCases(s);
+	// 4 дела; в начале месяца после дел без таймера — «Материал на кандидата», «Тихий сигнал», линейка
+	dailyCases(s, () => {
+		monthStartDilemmas(s);
+		monthStartLineOffer(s);
+	});
+	if (isOver(s)) return;
+	// 4а отложенные последствия (§9.8)
+	processDelayed(s);
+	if (isOver(s)) return;
 	// 5 ИИ соперников — через общий applyAction (D-027)
 	const strategy = opts.strategy ?? chooseRivalAction;
 	for (const id of RIVAL_IDS) {
@@ -156,12 +155,17 @@ export function advance(s: GameState, days: number, opts: AdvanceOptions = {}): 
 	const firstId = s.nextId;
 	const collect = () => s.log.filter((e) => e.id >= firstId);
 	if (isOver(s)) return { daysAdvanced: 0, stoppedBy: 'gameOver', events: [] };
+	// §3.4, §9.8: пока открыто модальное окно дилеммы или линейки, время не идёт (без ignorePause).
+	if (!opts.ignorePause && blockingSession(s)) {
+		forcePause(s, 'questChoice');
+		return { daysAdvanced: 0, stoppedBy: 'autopause', events: [] };
+	}
 	if (s.paused && !opts.ignorePause) return { daysAdvanced: 0, stoppedBy: 'paused', events: [] };
 	let n = 0;
 	for (; n < days; n++) {
 		stepDay(s, opts);
 		if (isOver(s)) return { daysAdvanced: n + 1, stoppedBy: 'gameOver', events: collect() };
-		if (s.paused && !opts.ignorePause) return { daysAdvanced: n + 1, stoppedBy: 'autopause', events: collect() };
+		if (!opts.ignorePause && (s.paused || blockingSession(s))) return { daysAdvanced: n + 1, stoppedBy: 'autopause', events: collect() };
 	}
 	return { daysAdvanced: n, stoppedBy: 'completed', events: collect() };
 }

@@ -9,6 +9,8 @@ import {
 	selectCases,
 	selectForecast,
 	selectCredit,
+	isDilemmaQuest,
+	lineSkill,
 	PERKS,
 	type Agent,
 	type DeptKey,
@@ -132,6 +134,10 @@ export const honestQuestPolicy: QuestPolicy = (s, q, av) => {
 export function handleQuests(s: GameState, policy: QuestPolicy): void {
 	for (const q of [...s.quests]) {
 		if (!s.quests.includes(q)) continue;
+		if (isDilemmaQuest(q.questId)) {
+			handleDilemma(s, q);
+			continue;
+		}
 		const av = questChoices(s, q)
 			.filter((c) => c.available)
 			.map((c) => c.id);
@@ -139,6 +145,155 @@ export function handleQuests(s: GameState, policy: QuestPolicy): void {
 		const c = policy(s, q, av);
 		if (c) act(s, { type: 'questChoice', sessionId: q.id, choice: c });
 	}
+}
+
+// ------------------------------------------------------------ дилеммы и линейка (D-067)
+
+/** default — вариант 0 (§9.8); honest — лучший не грязный; dirty — грязный, где он есть; random — случайный доступный. */
+export type DlMode = 'default' | 'honest' | 'dirty' | 'random';
+/** decline — всегда отказ (вариант 0); honest — «Осторожно» + «Собирать доказательства»; dirty — «Доказать преданность» + «Подтолкнуть». */
+export type LineMode = 'decline' | 'honest' | 'dirty' | 'random';
+export type ElMode = 'silent' | 'announce' | 'leak';
+
+/**
+ * Политика дилемм текущего хода. Выставляет обёртка бота (bots.ts) перед ходом, как rosterLimit.
+ * only — грязный выбор только у перечисленных дилемм (остальные по honest), для разложения вклада.
+ */
+export const dlConfig = {
+	dl: 'default' as DlMode,
+	line: 'decline' as LineMode,
+	el: null as ElMode | null,
+	/** Принудительный выбор в «Тихом сигнале» (wait/legal/wiretap/detain), иначе по dl. */
+	sig: null as string | null,
+	only: null as Set<string> | null,
+	rng: (() => 0.5) as () => number,
+	/** Агенты, которых бот не отдаёт в линейку (шпионы «Тени», оперативники «Монополии»). */
+	exclude: new Set<number>(),
+	/** Ведущий линейки: минимальный штат, при котором бот вообще берётся. */
+	lineMinRoster: 7,
+	/** D-066: старая политика команд (пары на расследованиях) — для сравнения с r4. */
+	legacyTeams: false
+};
+
+const HONEST_DL: Record<string, string> = {
+	dilemma_valuable_source: 'recruit',
+	dilemma_source_crime: 'surrender',
+	dilemma_forced_confession: 'by_the_book',
+	dilemma_sting: 'observe',
+	dilemma_quiet_signal: 'legal',
+	dilemma_share_with_cia: 'share',
+	dilemma_fudged_warrant: 'wait',
+	dilemma_cover_life: 'forbid',
+	dilemma_election_dossier: 'silent'
+};
+const DIRTY_DL: Record<string, string[]> = {
+	dilemma_valuable_source: ['recruit'],
+	dilemma_source_crime: ['blind_eye'],
+	dilemma_forced_confession: ['press'],
+	dilemma_sting: ['provoke'],
+	dilemma_quiet_signal: ['detain', 'wiretap', 'legal'],
+	dilemma_share_with_cia: ['share'],
+	dilemma_fudged_warrant: ['fudge'],
+	dilemma_cover_life: ['allow'],
+	dilemma_election_dossier: ['leak']
+};
+
+const lineWait = new WeakMap<QuestSession, number>();
+
+function handleDilemma(s: GameState, q: QuestSession): void {
+	const all = questChoices(s, q);
+	const av = all.filter((c) => c.available);
+	const choose = (id: string | null | undefined, param?: number) => {
+		if (!id || !av.some((c) => c.id === id)) return false;
+		return act(s, param === undefined ? { type: 'questChoice', sessionId: q.id, choice: id } : { type: 'questChoice', sessionId: q.id, choice: id, param });
+	};
+	const r = dlConfig.rng;
+	if (q.questId.startsWith('vanguard_')) {
+		lineDecision(s, q, av, choose);
+		return;
+	}
+	if (av.length === 0) return;
+	const mode = dlConfig.dl;
+	if (q.questId === 'dilemma_quiet_signal' && dlConfig.sig) {
+		if (choose(dlConfig.sig)) return;
+	}
+	if (q.questId === 'dilemma_election_dossier' && dlConfig.el) {
+		if (choose(dlConfig.el)) return;
+	}
+	if (mode === 'random') {
+		choose(av[Math.floor(r() * av.length)].id);
+		return;
+	}
+	if (mode === 'default') {
+		choose(av[0].id);
+		return;
+	}
+	const short = q.questId.replace('dilemma_', '');
+	const dirtyHere = mode === 'dirty' && (dlConfig.only === null || dlConfig.only.has(short) || (short === 'source_crime' && dlConfig.only.has('valuable_source')));
+	if (dirtyHere) for (const id of DIRTY_DL[q.questId] ?? []) if (choose(id)) return;
+	if (choose(HONEST_DL[q.questId])) return;
+	choose(av[0].id);
+}
+
+function lineDecision(s: GameState, q: QuestSession, av: ReturnType<typeof questChoices>, choose: (id: string, param?: number) => boolean): void {
+	const mode = dlConfig.line;
+	const r = dlConfig.rng;
+	if (q.questId === 'vanguard_result') {
+		choose('ok');
+		return;
+	}
+	if (mode === 'random') {
+		if (av.length === 0) return;
+		const c = av[Math.floor(r() * av.length)];
+		const ids = c.agentIds ?? [];
+		choose(c.id, ids.length ? ids[Math.floor(r() * ids.length)] : undefined);
+		return;
+	}
+	if (mode === 'decline') {
+		choose('decline') || choose('recall');
+		return;
+	}
+	const has = (id: string) => av.some((c) => c.id === id);
+	if (q.questId === 'vanguard_offer') {
+		if (q.stage === 'partner') {
+			const leadId = Number(q.params.leadId);
+			const p = av.find((c) => c.id === 'partner');
+			const partners = (p?.agentIds ?? []).filter((id) => !dlConfig.exclude.has(id));
+			// Напарник: самый «дешёвый» свободный (уровень, затем навык), если дома остаётся ≥ 4 свободных рук штата.
+			if (p && partners.length > 0 && s.agents.length >= dlConfig.lineMinRoster + 2) {
+				const pick = partners
+					.map((id) => s.agents.find((a) => a.id === id)!)
+					.filter((a) => a.id !== leadId && !isHero(a))
+					.sort((x, y) => x.level - y.level || x.id - y.id)[0];
+				if (pick && choose('partner', pick.id)) return;
+			}
+			choose('alone') || choose('decline');
+			return;
+		}
+		const st = av.find((c) => c.id === 'start');
+		const leads = (st?.agentIds ?? []).filter((id) => !dlConfig.exclude.has(id));
+		if (st && leads.length > 0 && s.agents.length >= dlConfig.lineMinRoster && s.budget >= 400) {
+			const lead = leads.map((id) => s.agents.find((a) => a.id === id)!).sort((x, y) => lineSkill(y) - lineSkill(x) || x.id - y.id)[0];
+			if (choose('start', lead.id)) return;
+		}
+		choose('decline');
+		return;
+	}
+	const pick = (pref: string[]) => {
+		for (const id of pref) if (has(id) && choose(id)) return true;
+		return false;
+	};
+	const ok =
+		q.questId === 'vanguard_stage2'
+			? pick(mode === 'dirty' ? ['devoted', 'cautious'] : ['cautious'])
+			: q.questId === 'vanguard_stage3'
+				? pick(mode === 'dirty' ? ['provoke', 'evidence'] : ['evidence'])
+				: pick(['go']);
+	if (ok) return;
+	// Нет денег на этап: ждём до 60 дней, потом отзываем.
+	const since = lineWait.get(q) ?? s.day;
+	lineWait.set(q, since);
+	if (s.day - since > 60) choose('recall');
 }
 
 // ------------------------------------------------------------ дела на карте
@@ -157,6 +312,8 @@ export interface CaseOpts {
 	pairWeakest?: boolean;
 	/** D-051: запускать расследования в кредит, когда наличных не хватает (по умолчанию да). */
 	credit?: boolean;
+	/** D-066: лишние свободные агенты идут подкреплением в идущие операции (по умолчанию да). */
+	reinforce?: boolean;
 }
 
 /** Хватает ли денег на операцию: наличные сверх резерва, либо (D-051) кредит на расследование. */
@@ -166,8 +323,96 @@ function opAffordable(s: GameState, type: OpType, cost: number, reserve: number,
 	return selectCredit(s).availableForOps >= cost;
 }
 
+/** Статистика команд и подкреплений для отчёта (сбрасывает game.ts на старте партии). */
+export const teamStats = { reinforced: 0 };
+
+/**
+ * D-066: одиночки, пока дел не меньше, чем свободных рук; лишние руки — в подкрепление.
+ * Расследование: ведущий — самый слабый агент, который один даёт шанс ≥ max(minInvest, 0.5) (сильных бережём
+ * для тяжёлых дел), иначе лучший. Подкрепление на старте: теракт — до 2 лучших бойцов (прикрытие);
+ * расследование d ≥ 3 — +1, d ≥ 4 — +2, только из «лишних» (свободных больше, чем оставшихся дел).
+ * Если шанс ниже порога, добираем людей до 3. После раздачи дел лишние свободные (кроме одного в резерве)
+ * идут подкреплением в идущие теракты и самые трудные расследования (пока прогресс < 50 %).
+ */
+function runCasesD066(s: GameState, o: CaseOpts): number {
+	const ex = o.exclude ?? new Set<number>();
+	const minI = o.minInvest ?? 0.3;
+	const minT = o.minTerror ?? 0.4;
+	let started = 0;
+	const free = () => s.agents.filter((a) => a.status === 'idle' && !ex.has(a.id));
+	const cases = selectCases(s)
+		.filter((c) => c.accessible && c.takenByOpId === null)
+		.sort(
+			(x, y) =>
+				(y.kind === 'terror' ? 100 : 0) - (x.kind === 'terror' ? 100 : 0) ||
+				(x.daysLeft ?? 999) - (y.daysLeft ?? 999) ||
+				y.difficulty - x.difficulty
+		);
+	const pv = (type: OpType, caseId: number, team: Agent[]) => previewOperation(s, { opType: type, agentIds: team.map((a) => a.id), caseId });
+	for (let i = 0; i < cases.length; i++) {
+		const c = cases[i];
+		const type: OpType = c.kind === 'terror' ? 'terror' : 'investigation';
+		const pool = free().sort((x, y) => primarySkill(y, type) - primarySkill(x, type) || x.id - y.id);
+		if (pool.length === 0) break;
+		if (!opAffordable(s, type, B.OP_COST[type], o.reserve, o.credit !== false)) continue;
+		const thr = type === 'terror' ? minT : minI;
+		const remaining = cases.length - i - 1;
+		const spare = Math.max(0, pool.length - 1 - remaining);
+		let lead = pool[0];
+		if (type === 'investigation') {
+			const goal = Math.max(thr, 0.5);
+			for (let j = pool.length - 1; j >= 0; j--) {
+				const p = pv(type, c.id, [pool[j]]);
+				if (!p.error && p.chance >= goal) {
+					lead = pool[j];
+					break;
+				}
+			}
+		}
+		const team = [lead];
+		const rest = pool.filter((a) => a !== lead);
+		// Подкрепление: теракт — лучшие бойцы; расследование — младшие по уровню (учатся, прибавка слота та же).
+		const extrasOrder = type === 'terror' ? rest : [...rest].sort((x, y) => x.level - y.level || primarySkill(y, type) - primarySkill(x, type) || x.id - y.id);
+		let want = type === 'terror' ? (o.terrorExtras === false ? 0 : 2) : c.difficulty >= 4 ? 2 : c.difficulty >= 3 ? 1 : 0;
+		want = Math.min(want, type === 'terror' ? rest.length : spare, B.OP_MAX_EXTRA_AGENTS);
+		for (let k = 0; k < want; k++) team.push(extrasOrder[k]);
+		let p = pv(type, c.id, team);
+		let k = team.length - 1;
+		while (!p.error && p.chance < thr && team.length < 1 + B.OP_MAX_EXTRA_AGENTS && k < extrasOrder.length) {
+			team.push(extrasOrder[k++]);
+			p = pv(type, c.id, team);
+		}
+		if (p.error || p.chance < thr) continue;
+		if (act(s, { type: 'startOp', opType: type, caseId: c.id, agentIds: team.map((a) => a.id) })) started++;
+	}
+	if (o.reinforce !== false) {
+		const openLeft = selectCases(s).filter((c) => c.accessible && c.takenByOpId === null).length;
+		let surplus = free().length - openLeft - 1;
+		if (surplus > 0) {
+			const ops = s.operations
+				.filter((op) => (op.type === 'terror' || op.type === 'investigation') && op.caseId !== null && op.agentIds.length < 1 + B.OP_MAX_EXTRA_AGENTS)
+				.filter((op) => (s.day - op.startDay) / Math.max(1, op.endDay - op.startDay) < 0.5)
+				.sort((a, b) => (b.type === 'terror' ? 1 : 0) - (a.type === 'terror' ? 1 : 0) || b.difficulty - a.difficulty || a.id - b.id);
+			for (const op of ops) {
+				if (surplus <= 0) break;
+				if (op.type === 'investigation' && op.difficulty < 3) continue;
+				const cand = free().sort((x, y) =>
+					op.type === 'terror' ? primarySkill(y, 'terror') - primarySkill(x, 'terror') || x.id - y.id : x.level - y.level || x.id - y.id
+				)[0];
+				if (!cand) break;
+				if (act(s, { type: 'reinforceOp', opId: op.id, agentId: cand.id })) {
+					surplus--;
+					teamStats.reinforced++;
+				}
+			}
+		}
+	}
+	return started;
+}
+
 /** Расследования и теракты: доступные дела, лучший по навыку ведущий. */
 export function runCases(s: GameState, o: CaseOpts): number {
+	if (!dlConfig.legacyTeams) return runCasesD066(s, o);
 	const ex = o.exclude ?? new Set<number>();
 	const minI = o.minInvest ?? 0.3;
 	const minT = o.minTerror ?? 0.4;
@@ -252,7 +497,7 @@ export function planHire(s: GameState, o: HireOpts & { exclude?: Set<number>; ra
 	const freeHome = s.agents.filter((a) => a.status === 'idle' && !ex.has(a.id)).length;
 	const unmet = selectCases(s).filter((c) => c.accessible && c.takenByOpId === null).length;
 	// Расследованию нужна пара: один свободный агент дело не возьмёт.
-	if (freeHome >= 2 || unmet === 0) return false;
+	if (freeHome >= (dlConfig.legacyTeams ? 2 : 1) || unmet === 0) return false; // D-066: одному свободному хватит на дело
 	// D-049: пока годовой пол цели выше 0.81·N, новый агент цель не поднимает — нанимать можно без запаса по плану.
 	// Смотрим на пол следующего квартала (найм окупается в нём).
 	const base = (B as Record<string, unknown>).PLAN_BASE_BY_YEAR as number[] | undefined;

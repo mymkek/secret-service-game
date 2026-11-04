@@ -9,6 +9,8 @@
 	import StartScreen from '../lib/ui/StartScreen.svelte';
 	import Dialogs from '../lib/ui/Dialogs.svelte';
 	import MenuDialog from '../lib/ui/MenuDialog.svelte';
+	import ConfirmHost from '../lib/ui/ConfirmHost.svelte';
+	import { Button, Chip, Tabs, Toast, type TabItem } from '../lib/ui/kit';
 
 	let { children } = $props();
 	let menuOpen = $state(false);
@@ -20,15 +22,16 @@
 		return () => game.stop();
 	});
 
-	const NAV = [
-		{ href: '/', label: 'Карта' },
-		{ href: '/ops', label: 'Операции' },
-		{ href: '/personnel', label: 'Персонал' },
-		{ href: '/departments', label: 'Отделы и технологии' },
-		{ href: '/rivals', label: 'Конкуренты' },
-		{ href: '/networks', label: 'Сети за рубежом' },
-		{ href: '/rules', label: 'Правила' }
-	];
+	const NAV: TabItem[] = $derived([
+		{ href: '/', label: 'Карта', icon: 'map' },
+		{ href: '/ops', label: 'Операции', icon: 'operation', badge: game.newCases, badgeLabel: `новых дел: ${game.newCases}` },
+		{ href: '/personnel', label: 'Персонал', icon: 'team' },
+		{ href: '/departments', label: 'Отделы и технологии', icon: 'departments' },
+		{ href: '/rivals', label: 'Конкуренты', icon: 'rivals' },
+		{ href: '/networks', label: 'Сети за рубежом', icon: 'networks' },
+		{ href: '/rules', label: 'Правила', icon: 'rules' }
+	]);
+	const isActive = (n: TabItem) => (n.href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(n.href));
 
 	const pending = $derived(game.s ? selectQuests(game.s).filter((q) => q.waitUntilDay === null && q.choices.length > 0).length : 0);
 
@@ -56,46 +59,31 @@
 	<StartScreen />
 {:else}
 	<div class="flex min-h-screen flex-col">
-		<header class="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-panel px-4 py-2">
+		<header class="flex flex-wrap items-center justify-between gap-4 bg-surface-1/90 px-6 py-3 shadow-elev-2 backdrop-blur">
 			<div class="flex items-center gap-3">
-				<h1 class="text-base font-bold text-gold">Менеджер спецслужбы</h1>
-				<span class="chip" title="Зерно партии">зерно: {game.s.seed}</span>
+				<h1 class="font-protocol text-2xl font-bold text-gold-bright">Менеджер спецслужбы</h1>
+				<Chip icon="seed" title="Зерно партии">зерно: {game.s.seed}</Chip>
 			</div>
 			<TimeBar />
 			<div class="flex items-center gap-2">
 				{#if pending > 0}
-					<button class="btn btn-gold" onclick={() => (game.dismissedQuests = [])}>Решения ({pending})</button>
+					<Button variant="primary" icon="warning" onclick={() => (game.dismissedQuests = [])}>Решения ({pending})</Button>
 				{/if}
-				<button class="btn" onclick={() => (menuOpen = true)} aria-haspopup="dialog">Меню</button>
+				<Button icon="menu" onclick={() => (menuOpen = true)} aria-haspopup="dialog">Меню</Button>
 			</div>
 		</header>
 		<ResourceBar />
-		<nav aria-label="Разделы" class="flex flex-wrap gap-1 border-b border-line bg-bg px-4 py-1.5">
-			{#each NAV as n (n.href)}
-				{@const active = n.href === '/' ? page.url.pathname === '/' : page.url.pathname.startsWith(n.href)}
-				<a
-					href={n.href}
-					aria-current={active ? 'page' : undefined}
-					class="relative rounded-md px-3 py-1 text-sm hover:text-gold {active ? 'bg-gold/15 text-gold' : 'text-muted'}"
-					>{n.label}{#if n.href === '/ops' && game.newCases > 0}<span
-							class="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] leading-none font-bold text-white"
-							title="Новых дел: {game.newCases}"
-							aria-label="новых дел: {game.newCases}">{game.newCases}</span
-						>{/if}</a
-				>
-			{/each}
-		</nav>
-		<main class="flex-1 p-4">{@render children()}</main>
+		<Tabs class="px-6 pt-1" items={NAV} {isActive} />
+		<main class="flex-1 p-6">{@render children()}</main>
 	</div>
 
 	<Dialogs onmenu={() => (menuOpen = true)} />
+	<ConfirmHost />
 	{#if menuOpen}<MenuDialog onclose={() => (menuOpen = false)} />{/if}
 {/if}
 
-<div class="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-80 flex-col gap-2" aria-live="polite" role="status">
+<div class="pointer-events-none fixed right-6 bottom-6 z-[60] flex w-[26rem] max-w-[calc(100vw-3rem)] flex-col gap-3" aria-live="polite" role="status">
 	{#each game.toasts as t (t.id)}
-		<div class="rounded-md border px-3 py-2 text-sm shadow-lg {t.kind === 'error' ? 'border-danger bg-panel text-danger' : t.kind === 'success' ? 'border-ok bg-panel text-ok' : 'border-line bg-panel'}">
-			{t.text}
-		</div>
+		<Toast kind={t.kind} text={t.text} href={t.href} title={t.rich?.title} detail={t.rich?.detail} chips={t.rich?.chips} lost={t.rich?.lost} onclose={() => game.closeToast(t.id)} onhold={(h) => game.holdToast(t.id, h, t.rich ? 6000 : 4000)} />
 	{/each}
 </div>

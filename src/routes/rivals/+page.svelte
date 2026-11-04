@@ -2,10 +2,13 @@
 	import { selectActionCosts, selectKompromat, selectRivals, validateAction, type PlayerAction } from '../../lib/game/index';
 	import { game } from '../../lib/ui/game.svelte';
 	import { rivalDossiers } from '../../lib/content/index';
-	import { AGENCY_VAR, errorText, fmtDay, rivalName } from '../../lib/ui/labels';
+	import { AGENCY_VAR, fmtDay, rivalName } from '../../lib/ui/labels';
 	import ActionButton from '../../lib/ui/ActionButton.svelte';
 	import { senatorName } from '../../lib/ui/content';
 	import Bar from '../../lib/ui/Bar.svelte';
+	import { perform } from '../../lib/ui/perform';
+	import { Chip, Icon } from '../../lib/ui/kit';
+	import { blackmailInfo, congressInfo, counterInfo, leakInfo, loyaltyInfo, prInfo, rivalActionInfo } from '../../lib/ui/action-info';
 
 	const rivals = $derived(game.s ? selectRivals(game.s) : []);
 	const komp = $derived(game.s ? selectKompromat(game.s) : []);
@@ -17,10 +20,10 @@
 	const err = (a: PlayerAction) => (game.s ? validateAction(game.s, a) : null);
 
 	const ACTIONS = [
-		{ type: 'sabotage', label: 'Подстава', ok: 'Подстава устроена' },
-		{ type: 'lobby', label: 'Лоббировать против', ok: 'Лоббирование начато' },
-		{ type: 'poach', label: 'Переманить агента', ok: 'Попытка переманить агента' },
-		{ type: 'absorb', label: 'Поглотить', ok: 'Поглощение начато' }
+		{ type: 'sabotage', label: 'Подстава' },
+		{ type: 'lobby', label: 'Лоббировать против' },
+		{ type: 'poach', label: 'Переманить агента' },
+		{ type: 'absorb', label: 'Поглотить' }
 	] as const;
 
 	function kTarget(t: { kind: string; id?: unknown }): string {
@@ -33,15 +36,15 @@
 
 <div class="space-y-6">
 	{#if coalition}
-		<p class="rounded border border-danger bg-danger/10 px-3 py-2 text-sm text-danger">Конкуренты объединились в коалицию против вас.</p>
+		<p class="flex items-center gap-2 rounded-2xl border border-danger/50 bg-danger/10 px-4 py-3 text-sm text-danger"><Icon name="warning" size={20} />Конкуренты объединились в коалицию против вас.</p>
 	{/if}
 
 	<section aria-label="Досье на конкурентов" class="grid gap-3 lg:grid-cols-3">
 		{#each rivals as r (r.id)}
 			<article class="card space-y-3 text-sm {r.alive ? '' : 'opacity-60'}" style="border-top: 3px solid {r.collapsing ? 'var(--color-warn)' : AGENCY_VAR[r.id]}" aria-label={rivalName(r.id)}>
 				<header class="flex items-baseline justify-between">
-					<h2 class="text-base font-semibold">{rivalName(r.id)}</h2>
-					{#if r.collapsing}<span class="chip border-warn text-warn">на грани — выбудет: {r.disbandDay !== null ? fmtDay(r.disbandDay) : 'скоро'}</span>{/if}
+					<h2 class="text-xl font-bold">{rivalName(r.id)}</h2>
+					{#if r.collapsing}<Chip tone="warn">на грани — выбудет: {r.disbandDay !== null ? fmtDay(r.disbandDay) : 'скоро'}</Chip>{/if}
 					<span class="chip">{r.absorbed ? 'поглощён' : r.alive ? `доля ${Math.round(r.share * 100)}%` : 'расформирован'}</span>
 				</header>
 				<p class="text-xs text-muted italic">{rivalDossiers[r.id].motto}</p>
@@ -62,7 +65,7 @@
 					<div class="flex flex-wrap gap-2">
 						{#each ACTIONS as a (a.type)}
 							{#if costs}
-								<ActionButton label={a.type === 'absorb' && r.collapsing ? 'Поглотить (на грани: шанс выше)' : a.label} v={costs.rivals[r.id][a.type]} onclick={() => game.act({ type: a.type, rivalId: r.id }, a.ok)} />
+								<ActionButton label={a.type === 'absorb' && r.collapsing ? 'Поглотить (на грани: шанс выше)' : a.label} v={costs.rivals[r.id][a.type]} info={rivalActionInfo(a.type, rivalName(r.id), costs.rivals[r.id][a.type], r.collapsing)} onclick={() => perform({ type: a.type, rivalId: r.id }, rivalName(r.id))} />
 							{/if}
 						{/each}
 					</div>
@@ -71,7 +74,7 @@
 						<div class="h2">Известные действия</div>
 						<ul class="max-h-40 space-y-1 overflow-y-auto text-xs">
 							{#each r.knownActions.toReversed().slice(0, 12) as e (e.id)}
-								<li><span class="text-muted">д.{e.day}</span> {game.line(e).text}</li>
+							<li><span class="text-muted">д.{e.day}</span> {game.line(e).text}</li>
 							{:else}
 								<li class="text-muted">Ничего не известно.</li>
 							{/each}
@@ -87,7 +90,8 @@
 			<h2 class="h2">Компромат ({komp.length})</h2>
 			<ul class="space-y-2 text-sm">
 				{#each komp as k (k.id)}
-					<li class="rounded border border-line bg-bg p-2">
+					{@const bc = costs?.blackmail.find((b) => b.kompromatId === k.id)}
+					<li class="card-1">
 						<div class="flex justify-between gap-2">
 							<span>{kTarget(k.target)}</span>
 							<span class="text-xs text-muted">сила {Math.round(k.strength * 100) / 100} · {k.daysLeft === null ? 'бессрочно' : `${k.daysLeft} дн.`}</span>
@@ -96,13 +100,13 @@
 							{#if k.target.kind === 'rival'}
 								{@const lc = leakCost(k.id)}
 								{#if lc}
-									<ActionButton label="Слить" v={lc} onclick={() => game.act({ type: 'leak', kompromatId: k.id }, 'Слив запущен')} />
-									<span class="self-center text-[11px] text-muted">репутация цели {lc.targetRepDelta}</span>
+									<ActionButton label="Слить" v={lc} info={leakInfo(rivalName(lc.rivalId), lc)} onclick={() => perform({ type: 'leak', kompromatId: k.id }, rivalName(lc.rivalId))} />
+									<span class="self-center text-xs text-muted">репутация цели {lc.targetRepDelta}</span>
 								{/if}
 							{/if}
-							<button class="btn px-2 py-0.5 text-xs" disabled={!!err({ type: 'blackmail', kompromatId: k.id })} title={errorText(err({ type: 'blackmail', kompromatId: k.id }))} onclick={() => game.act({ type: 'blackmail', kompromatId: k.id }, 'Шантаж')}>Шантаж</button>
+							<ActionButton label="Шантаж" v={bc ?? { cost: 0, influence: 0, readyInDays: 0, chance: null, risk: null, error: err({ type: 'blackmail', kompromatId: k.id }) }} info={blackmailInfo(kTarget(k.target), bc)} onclick={() => perform({ type: 'blackmail', kompromatId: k.id })} />
 							{#if costs}
-								<ActionButton label="Контр-компромат" v={{ ...costs.counterKompromat, error: costs.counterKompromat.error ?? err({ type: 'counterKompromat', kompromatId: k.id }) }} onclick={() => game.act({ type: 'counterKompromat', kompromatId: k.id }, 'Контр-компромат')} />
+								<ActionButton label="Контр-компромат" v={{ ...costs.counterKompromat, error: costs.counterKompromat.error ?? err({ type: 'counterKompromat', kompromatId: k.id }) }} info={counterInfo(costs.counterKompromat)} onclick={() => perform({ type: 'counterKompromat', kompromatId: k.id })} />
 							{/if}
 						</div>
 					</li>
@@ -116,9 +120,9 @@
 			<h2 class="h2">Работа с властью и ведомством</h2>
 			<div class="flex flex-wrap gap-3">
 				{#if costs}
-					<ActionButton label="Работа с Конгрессом" v={costs.congressWork} onclick={() => game.act({ type: 'congressWork' }, 'Работа с Конгрессом начата')} />
-					<ActionButton label="Пиар-кампания" v={costs.prCampaign} onclick={() => game.act({ type: 'prCampaign' }, 'Пиар-кампания запущена')} />
-					<ActionButton label="Проверка лояльности" v={costs.loyaltyCheck} onclick={() => game.act({ type: 'loyaltyCheck' }, 'Проверка лояльности запущена')} />
+					<ActionButton label="Работа с Конгрессом" v={costs.congressWork} info={congressInfo(costs.congressWork)} onclick={() => perform({ type: 'congressWork' })} />
+					<ActionButton label="Пиар-кампания" v={costs.prCampaign} info={prInfo(costs.prCampaign)} onclick={() => perform({ type: 'prCampaign' })} />
+					<ActionButton label="Проверка лояльности" v={costs.loyaltyCheck} info={loyaltyInfo(costs.loyaltyCheck)} onclick={() => perform({ type: 'loyaltyCheck' })} />
 				{/if}
 			</div>
 			<p class="text-xs text-muted">Текущий день: {day}</p>

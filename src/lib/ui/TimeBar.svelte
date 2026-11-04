@@ -2,6 +2,7 @@
 	import { selectDate } from '../game/index';
 	import type { Speed } from '../game/index';
 	import { game } from './game.svelte';
+	import { Button, Icon } from './kit';
 
 	const d = $derived(game.s ? selectDate(game.s) : null);
 	const over = $derived(game.s ? game.s.outcome.status !== 'active' : true);
@@ -28,24 +29,31 @@
 
 {#if d}
 	<div class="flex items-center gap-3" role="group" aria-label="Время">
-		<button
-			class="btn btn-gold w-28"
+		<Button
+			variant="primary"
+			class="w-36"
+			icon={d.paused ? 'play' : 'pause'}
 			onclick={() => game.togglePause()}
 			disabled={over}
 			aria-label={d.paused ? 'Снять паузу' : 'Поставить на паузу'}
 			aria-pressed={d.paused}
 			data-testid="pause-toggle"
 		>
-			{d.paused ? '▶ Пуск' : '❚❚ Пауза'}
-		</button>
-		<div class="flex gap-1" role="group" aria-label="Скорость игры">
+			{d.paused ? 'Пуск' : 'Пауза'}
+		</Button>
+		<div class="flex gap-1 rounded-2xl bg-surface-1 p-1 shadow-[inset_0_2px_4px_rgb(0_0_0/0.4)]" role="group" aria-label="Скорость игры">
 			{#each SPEEDS as v (v)}
-				<button class="btn px-2.5 {d.speed === v ? 'btn-gold' : ''}" aria-pressed={d.speed === v} aria-label="Скорость ×{v}" onclick={() => game.setSpeed(v)}>×{v}</button>
+				<button
+					class="btn !min-h-9 !rounded-xl !px-3 {d.speed === v ? 'btn-gold' : 'btn-ghost'}"
+					aria-pressed={d.speed === v}
+					aria-label="Скорость ×{v}"
+					onclick={() => game.setSpeed(v)}>×{v}</button
+				>
 			{/each}
 		</div>
 		<div class="leading-tight">
-			<div class="text-sm font-semibold tabular-nums" data-testid="date" data-day={d.day}>
-				Год {d.year} · месяц {d.month} · день {d.dayOfMonth} <span class="text-muted">(Q{d.quarter})</span>
+			<div class="flex items-center gap-2 text-sm font-bold tabular-nums" data-testid="date" data-day={d.day}>
+				<Icon name="calendar" size={18} class="text-gold" />Год {d.year} · месяц {d.month} · день {d.dayOfMonth} <span class="text-muted">(Q{d.quarter})</span>
 			</div>
 			<div class="text-xs text-muted">
 				{#if d.paused && d.pauseReasons.length}

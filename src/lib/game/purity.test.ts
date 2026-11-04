@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { LOG_KINDS, PENDING_LOG_KINDS } from './types';
+import { DILEMMA_LOG_KINDS, LOG_KINDS, PENDING_LOG_KINDS } from './types';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 
@@ -36,6 +36,6 @@ describe('чистота ядра', () => {
 				}
 			}
 		}
-		for (const k of used) expect([...LOG_KINDS, ...PENDING_LOG_KINDS] as readonly string[]).toContain(k);
+		for (const k of used) expect([...LOG_KINDS, ...PENDING_LOG_KINDS, ...DILEMMA_LOG_KINDS] as readonly string[]).toContain(k);
 	});
 });

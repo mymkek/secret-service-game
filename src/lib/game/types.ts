@@ -54,6 +54,8 @@ export type AgentLocation =
 	| { countryId: CountryId }
 	| { rivalId: RivalId }
 	| { leaderId: number }
+	/** Линейка «Народный авангард» (§9.9): ведущий и напарник внедрены на всё время линейки. */
+	| { lineId: 'vanguard' }
 	| null;
 
 export interface Skills {
@@ -96,6 +98,8 @@ export interface Agent {
 	legendBonus: boolean;
 	lastMedalDay: number | null;
 	hiredDay: number;
+	/** «Легенда требует личной жизни» (§9.8): разрешено; пока внедрён — раскрытие ×0.5, при выходе — бросок скандала. */
+	coverLife: boolean;
 }
 
 /** Кандидат в пуле найма — это готовый агент, ещё не принятый на службу. */
@@ -111,7 +115,12 @@ export interface Defector {
 }
 
 export type CaseKind = 'regular' | 'terror';
-export type CaseSource = 'random' | 'card_terror' | 'card_cyber' | 'repr3' | 'informant';
+export type CaseSource = 'random' | 'card_terror' | 'card_cyber' | 'repr3' | 'informant' | 'dilemma';
+/**
+ * Метка дела из дилемм (§9.8): 'sting' — дело-провокация (теракт), 'signal' — проверка «Тихого сигнала»,
+ * 'real_culprit' — настоящий преступник после ложного признания, 'source' — дело от «Ценного источника».
+ */
+export type CaseTag = 'sting' | 'signal' | 'real_culprit' | 'source';
 
 export interface Case {
 	id: number;
@@ -134,6 +143,10 @@ export interface Case {
 	intercepted: boolean;
 	/** id операции игрока, которая ведёт дело. */
 	takenByOpId: number | null;
+	/** Метка дела из дилемм (§9.8) или null. */
+	tag: CaseTag | null;
+	/** Для 'signal': id сигнала (реальность сигнала скрыта в dilemmas.signalReal). */
+	signalRef: number | null;
 }
 
 export type OpTarget =
@@ -157,6 +170,130 @@ export interface Operation {
 	cost: number;
 	difficulty: number;
 	dirty: boolean;
+	/** Дилемма, привязанная к операции (§9.8), и выбранный вариант (id выбора) — null, пока не выбран. */
+	dilemmaId: OpDilemmaId | null;
+	dilemmaChoice: string | null;
+	/** Сумма прибавок к шансу из дилемм: входит в bonus §5.2 и в p_shown. */
+	dilemmaBonus: number;
+	/** «Подправить заявку»: ордер пропущен. */
+	warrantSkipped: boolean;
+	/** Завершение ждёт выбора в окне дилеммы (фазы end_before_roll / end_success). */
+	held: boolean;
+	/** Итог броска, если он уже сделан (фаза end_success ждёт выбора), иначе null. */
+	rolled: boolean | null;
+	/** Шанс, с которым бросали (для журнала), иначе null. */
+	rollChance: number | null;
+	/** Успех без броска («Надавить», «Предложить сделку»). */
+	forcedSuccess: boolean;
+	/** Очко плана за успех не начисляется («Завербовать», «Сделка»). */
+	noPlanPoint: boolean;
+	/** Множитель награды за успех («Сделка» ×0.5). */
+	rewardMult: number;
+}
+
+// ------------------------------------------------------------ дилеммы, линейка, эпилог (§9.8–9.10, D-067)
+
+export const OP_DILEMMA_IDS = ['valuable_source', 'forced_confession', 'sting', 'share_with_cia', 'fudged_warrant', 'cover_life'] as const;
+export type OpDilemmaId = (typeof OP_DILEMMA_IDS)[number];
+export type DilemmaId = OpDilemmaId | 'quiet_signal' | 'election_dossier';
+export type DilemmaPhase = 'start' | 'mid' | 'end_before_roll' | 'end_success';
+/** Метка скрытого риска варианта (§9.8): по DILEMMA_RISK_LABELS. */
+export type RiskLevel = 'low' | 'medium' | 'high';
+
+export interface PendingDilemma {
+	dilemmaId: OpDilemmaId;
+	opId: number;
+	phase: DilemmaPhase;
+	/**
+	 * День назначения (§9.8, D-069): по нему сгоревшая дилемма снимает свои откаты.
+	 * null — запись из сейва до schemaVersion 7: откаты при сгорании не возвращаются.
+	 */
+	assignedDay: number | null;
+	/** lastDayById[dilemmaId] до назначения (null — ключа не было); сгоревшая дилемма его возвращает. */
+	prevLastDay: number | null;
+}
+
+export interface DilemmasState {
+	/** Глобальный откат: следующая дилемма не раньше этого дня. */
+	nextDay: number;
+	/** Последний день назначения каждой дилеммы (повтор не раньше DILEMMA_REPEAT_COOLDOWN_DAYS). */
+	lastDayById: Record<string, number>;
+	/** Назначенные операционные дилеммы, ждущие своей фазы. */
+	pending: PendingDilemma[];
+	/** Скрыто: реален ли сигнал (ключ — id сигнала = id его сессии). */
+	signalReal: Record<string, boolean>;
+}
+
+export type DelayedKind = 'false_confession' | 'sting_judge' | 'signal_attack' | 'fudge_audit' | 'line_provoke';
+
+/** Отложенное последствие (§9.8): срабатывает на шаге 4а дня dueDay. */
+export interface DelayedEffect {
+	id: number;
+	dueDay: number;
+	kind: DelayedKind;
+	params: Record<string, number | string | boolean | null>;
+}
+
+export interface ValuableSource {
+	sinceDay: number;
+	/** Преступления, на которые закрыли глаза. */
+	crimes: number;
+}
+
+export interface LineState {
+	/** Текущий (или последний пройденный) этап 1..4. */
+	stage: number;
+	/** Вариант этапа 2: 0 «Осторожно», 1 «Доказать преданность». */
+	variant2: number | null;
+	/** Вариант этапа 3: 0 «Доказательства», 1 «Подтолкнуть», 2 «Тихо сорвать». */
+	variant3: number | null;
+	leadId: number;
+	partnerId: number | null;
+	startedDay: number;
+	/** Конец идущего этапа; null — пауза или окно выбора. */
+	stageEndDay: number | null;
+	/** Конец паузы перед окном следующего этапа; null — этап идёт или окно открыто. */
+	pauseUntilDay: number | null;
+}
+
+export interface ElectionState {
+	/** Сдвиг шанса смены власти от дилеммы «Материал на кандидата». */
+	delta: number;
+	result: 'new_admin' | 'reelected' | null;
+}
+
+export type ElectionMeddling = 'none' | 'public' | 'leak';
+
+/** Счётчики для эпилога «Рассекречивание» (§9.10, §11.3). */
+export interface EpilogueHistory {
+	forcedConfessions: number;
+	falseConfessions: number;
+	falseReviews: number;
+	stings: number;
+	stingsWouldntAct: number;
+	stingsExposed: number;
+	informantCrimes: number;
+	sourceExposed: boolean;
+	signals: number;
+	signalsReal: number;
+	signalsPrevented: number;
+	signalsPreventedDirty: number;
+	missedSignals: number;
+	innocentsSurveilled: number;
+	innocentsDetained: number;
+	warrantsFudged: number;
+	fudgeCaught: number;
+	coverRomances: number;
+	coverScandals: number;
+	sharedWithCia: number;
+	electionMeddling: ElectionMeddling;
+	leakRevealed: boolean;
+	linesStarted: number;
+	linesCompleted: number;
+	linesProvoked: number;
+	lineCrimes: number;
+	lineAgentsLost: number;
+	lineExposed: number;
 }
 
 export type KompromatTarget =
@@ -316,7 +453,30 @@ export interface TimedTask {
 	disbandOnFail: boolean;
 }
 
+/**
+ * Окна дилемм (§9.8) и линейки «Народный авангард» (§9.9) — те же квест-сессии.
+ * Все, кроме 'vanguard_result', модальные: пока выбор не сделан, advance без ignorePause не идёт.
+ */
+export const DILEMMA_QUEST_IDS = [
+	'dilemma_valuable_source',
+	'dilemma_source_crime',
+	'dilemma_forced_confession',
+	'dilemma_sting',
+	'dilemma_quiet_signal',
+	'dilemma_share_with_cia',
+	'dilemma_fudged_warrant',
+	'dilemma_cover_life',
+	'dilemma_election_dossier',
+	'vanguard_offer',
+	'vanguard_stage2',
+	'vanguard_stage3',
+	'vanguard_stage4',
+	'vanguard_result'
+] as const;
+export type DilemmaQuestId = (typeof DILEMMA_QUEST_IDS)[number];
+
 export type QuestId =
+	| DilemmaQuestId
 	| 'hearings'
 	| 'raise_request'
 	| 'union_meeting'
@@ -380,6 +540,43 @@ export interface LogEntry {
 	data: Record<string, LogValue>;
 	/** Для действий соперников: кто (или 'unknown'). */
 	source: RivalId | 'unknown' | null;
+}
+
+/**
+ * Форма LogEntry.data у записей 'op_success' / 'op_fail' (пишет ops.ts → completeOperation).
+ * Хранится как Record<string, LogValue>; этот тип — для чтения в UI: `entry.data as unknown as OpResultLogData`.
+ * Разницы считаются снимком «до/после» разрешения операции, округлены до сотых; нулевые поля не пишутся.
+ */
+export interface OpResultLogData {
+	opId: number;
+	type: OpType;
+	caseId: number | null;
+	/** Шанс успеха, с которым бросали (0..1). */
+	chance: number;
+	/** Только для операций по делу (investigation / terror), если дело ещё было на карте. */
+	stateId?: StateId;
+	caseKind?: CaseKind;
+	difficulty?: number;
+	/** Метка дела (§9.8): 'sting' | 'signal' | 'real_culprit' | 'source'; нет поля — дело без метки. */
+	caseTag?: CaseTag;
+	/** Только для операций с целью (infiltration / surveillance). У 'president' нет targetId. */
+	targetKind?: OpTarget['kind'];
+	targetId?: RivalId | number | string;
+	budgetDelta?: number;
+	planPointsDelta?: number;
+	reputationDelta?: number;
+	influenceDelta?: number;
+	exposureDelta?: number;
+	/** «Под следствием». */
+	investigationDelta?: number;
+	/** Сумма изменений kompromatOnPlayer у всех соперников (компромат на игрока). */
+	kompromatOnPlayerDelta?: number;
+	/** Число новых предметов компромата у игрока (включая «Случайную находку»). */
+	kompromatGained?: number;
+	/** Id погибших агентов через запятую, например "12,15" (также есть записи agent_killed). */
+	killedAgentIds?: string;
+	/** Id пойманного агента (также есть запись agent_captured). */
+	capturedAgentIds?: string;
 }
 
 export interface Outcome {
@@ -539,6 +736,17 @@ export interface GameState {
 	cards: CardsState;
 	quests: QuestSession[];
 	counters: Counters;
+
+	// D-067 (§9.8–9.10, §11.3)
+	dilemmas: DilemmasState;
+	delayed: DelayedEffect[];
+	valuableSource: ValuableSource | null;
+	line: LineState | null;
+	/** Не раньше этого дня — следующее предложение линейки. */
+	lineNextOfferDay: number;
+	election: ElectionState;
+	history: EpilogueHistory;
+
 	log: LogEntry[];
 	outcome: Outcome;
 }
@@ -566,3 +774,34 @@ export type LogKind = (typeof LOG_KINDS)[number];
  */
 export const PENDING_LOG_KINDS = [] as const satisfies readonly string[];
 export type PendingLogKind = (typeof PENDING_LOG_KINDS)[number];
+
+/**
+ * Виды журнала дилемм, линейки и выборов (D-067). Ядро их пишет; тексты ещё не написаны.
+ * Отдельный список, чтобы текущий контент (Record<LogKind | PendingLogKind>) оставался валидным;
+ * content-writer добавит тексты и перенесёт их в LOG_KINDS. EventTextSchema их уже принимает.
+ */
+export const DILEMMA_LOG_KINDS = [
+	'dilemma_burned',
+	'source_cases',
+	'source_lost',
+	'source_exposed',
+	'false_confession_culprit',
+	'false_confession_review',
+	'sting_case',
+	'sting_judge',
+	'signal_case',
+	'signal_prevented',
+	'signal_false_alarm',
+	'signal_attack',
+	'fudge_caught',
+	'cover_scandal',
+	'election_leak_revealed',
+	'line_started',
+	'line_stage_done',
+	'line_success',
+	'line_quiet',
+	'line_failed',
+	'line_recalled',
+	'line_exposed'
+] as const;
+export type DilemmaLogKind = (typeof DILEMMA_LOG_KINDS)[number];

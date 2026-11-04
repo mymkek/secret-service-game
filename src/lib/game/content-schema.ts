@@ -4,9 +4,11 @@
 import { z } from 'zod';
 import { BUILTIN_CARDS } from './cards';
 import { US_STATES } from './geo';
-import { QUEST_IDS } from './quests';
+import { ALL_QUEST_IDS } from './quests';
+import { DILEMMA_CHOICE_IDS } from './dilemmas';
 import type { CardEffect, CardRequirement, GameConfig, TraitModifier } from './types';
-import { BUILTIN_TRAITS, DEPT_KEYS, LEADER_ARCHETYPES, LOG_KINDS, OP_TYPES, PENDING_LOG_KINDS, RIVAL_IDS, TECH_IDS } from './types';
+import { BUILTIN_TRAITS, DEPT_KEYS, DILEMMA_LOG_KINDS, DILEMMA_QUEST_IDS, LEADER_ARCHETYPES, LOG_KINDS, OP_TYPES, PENDING_LOG_KINDS, RIVAL_IDS, TECH_IDS } from './types';
+import type { DilemmaQuestId } from './types';
 
 const id = z
 	.string()
@@ -19,7 +21,8 @@ const shortText = z.string().min(1).max(200);
 // ------------------------------------------------------------ трейты (§4.2.5)
 
 export const TraitModifierSchema = z.discriminatedUnion('kind', [
-	z.object({ kind: z.literal('opChance'), opType: z.enum([...OP_TYPES, 'all']), value: z.number().min(-0.3).max(0.3) }),
+	// §4.2.5, D-066: модификатор шанса только ≥ 0 — иначе добавление агента могло бы снизить шанс.
+	z.object({ kind: z.literal('opChance'), opType: z.enum([...OP_TYPES, 'all']), value: z.number().min(0).max(0.3) }),
 	z.object({ kind: z.literal('loyaltyPerMonth'), value: z.number().min(-10).max(10) }),
 	z.object({ kind: z.literal('exposurePerOp'), value: z.number().min(-5).max(5) }),
 	z.object({ kind: z.literal('defectMult'), value: z.number().min(0).max(5) }),
@@ -129,7 +132,7 @@ export const ChanceCardContentSchema = z
 
 /** Шаблон текста записи журнала. Плейсхолдеры {name} берутся из LogEntry.data. */
 export const EventTextSchema = z.object({
-	kind: z.enum([...LOG_KINDS, ...PENDING_LOG_KINDS]),
+	kind: z.enum([...LOG_KINDS, ...PENDING_LOG_KINDS, ...DILEMMA_LOG_KINDS]),
 	text: text,
 	severity: z.enum(['info', 'success', 'warning', 'danger']).default('info')
 });
@@ -142,7 +145,10 @@ export const CaseTextSchema = z
 		minDifficulty: z.number().int().min(1).max(5),
 		maxDifficulty: z.number().int().min(1).max(5),
 		title: shortText,
-		description: text
+		description: text,
+		/** Развязки дела для UI: текст при успехе и при провале операции (выбирается по id дела). */
+		success: z.array(text).min(1),
+		fail: z.array(text).min(1)
 	})
 	.refine((c) => c.minDifficulty <= c.maxDifficulty, { message: 'minDifficulty > maxDifficulty' });
 
@@ -184,12 +190,81 @@ export const INK_EXTERNAL_FUNCTIONS = {
 export type InkExternalName = keyof typeof INK_EXTERNAL_FUNCTIONS;
 
 export const QuestContentSchema = z.object({
-	questId: z.enum(QUEST_IDS as [string, ...string[]]),
+	questId: z.enum(ALL_QUEST_IDS as [string, ...string[]]),
 	title: shortText,
 	/** Путь к скомпилированному Ink JSON внутри src/lib/content. */
 	ink: z.string().min(1),
 	/** Подписи кнопок для выборов ядра (questChoices): id выбора → текст. */
 	choiceLabels: z.record(z.string(), shortText)
+});
+
+// ------------------------------------------------------------ дилеммы, линейка, эпилог (§9.8–9.10, D-067)
+
+/** Вариант окна дилеммы: id — из DILEMMA_CHOICE_IDS, label — кнопка с явными эффектами точными числами. */
+const DilemmaChoiceTextSchema = z.object({
+	id,
+	label: shortText,
+	/** Довод «за» (§10.3): почему этот вариант кажется разумным. */
+	argument: text,
+	/** Чем кончилось (показывается после выбора). */
+	outcome: text
+});
+
+/**
+ * Окно дилеммы (§9.8) или этапа линейки (§9.9): тексты к сессии DILEMMA_QUEST_IDS.
+ * Механику (шансы, эффекты, риски) задаёт ядро; набор и порядок вариантов — DILEMMA_CHOICE_IDS.
+ */
+export const DilemmaDefSchema = z
+	.object({
+		questId: z.enum(DILEMMA_QUEST_IDS),
+		title: shortText,
+		body: text,
+		/** «В реальности было похожее дело…» — без имён живых частных лиц (исследование §5). */
+		realCase: text.optional(),
+		choices: z.array(DilemmaChoiceTextSchema).min(1)
+	})
+	.refine((d) => d.choices.every((c) => DILEMMA_CHOICE_IDS[d.questId as DilemmaQuestId].includes(c.id)), {
+		message: 'id выбора не из DILEMMA_CHOICE_IDS этой сессии',
+		path: ['choices']
+	});
+
+/** Линейка «Народный авангард» (§9.9): тексты этапов и развязок (окна — DilemmaDefSchema). */
+export const LineDefSchema = z.object({
+	id: z.literal('vanguard'),
+	name: shortText,
+	description: text,
+	/** Описание этапов 1..4 для экрана линейки. */
+	stages: z.array(z.object({ stage: z.number().int().min(1).max(4), title: shortText, text: text })).length(4),
+	/**
+	 * Развязки по vanguard_result.params.outcome. fail_broken — срыв: ведущий выбыл не по линейке
+	 * (D-068); пока опционально, без текста Ink показывает общий итог.
+	 */
+	outcomes: z
+		.object({
+			success_clean: text,
+			success_dirty: text,
+			quiet: text,
+			recalled: text,
+			fail_fled: text,
+			fail_killed: text,
+			fail_captured: text,
+			fail_broken: text.optional()
+		})
+		.strict(),
+	realCase: text.optional()
+});
+
+/** Эпилог «Рассекречивание» (§9.10): строки по ключам EpilogueLine, 5 вердиктов, 6 абзацев о выборах. */
+export const EpilogueTextSchema = z.object({
+	title: shortText,
+	/** Шаблоны строк «отложенной правды» по EpilogueLine.key; подстановки {name} из EpilogueLine.values. */
+	lines: z.record(
+		z.enum(['forced_confessions', 'stings', 'informant', 'signals', 'innocents', 'warrants', 'cover_lives', 'vanguard', 'shared_with_cia', 'election', 'dirty_actions']),
+		z.object({ text: text, realCase: text.optional() })
+	),
+	verdicts: z.record(z.enum(['church', 'reform', 'gray', 'heavy_memory', 'exemplary']), z.object({ title: shortText, text: text })),
+	/** Ключ — result:meddling, например 'new_admin:leak'. */
+	election: z.record(z.enum(['new_admin:none', 'new_admin:public', 'new_admin:leak', 'reelected:none', 'reelected:public', 'reelected:leak']), text)
 });
 
 // ------------------------------------------------------------ тексты экранов (досье, финалы, операции, технологии, новости)
@@ -255,7 +330,11 @@ export const ContentBundleSchema = z.object({
 	endings: z.array(EndingTextSchema).optional(),
 	operations: z.array(OperationTextSchema).optional(),
 	techs: z.array(TechContentSchema).optional(),
-	news: z.array(NewsItemSchema).optional()
+	news: z.array(NewsItemSchema).optional(),
+	// D-067: тексты окон дилемм и линейки, линейка, эпилог (ядро их не читает).
+	dilemmas: z.array(DilemmaDefSchema).optional(),
+	line: LineDefSchema.optional(),
+	epilogue: EpilogueTextSchema.optional()
 });
 
 export type TraitContent = z.infer<typeof TraitContentSchema>;
@@ -268,6 +347,9 @@ export type EndingText = z.infer<typeof EndingTextSchema>;
 export type OperationText = z.infer<typeof OperationTextSchema>;
 export type TechContent = z.infer<typeof TechContentSchema>;
 export type NewsItem = z.infer<typeof NewsItemSchema>;
+export type DilemmaDef = z.infer<typeof DilemmaDefSchema>;
+export type LineDef = z.infer<typeof LineDefSchema>;
+export type EpilogueText = z.infer<typeof EpilogueTextSchema>;
 
 // Проверка на этапе компиляции: схемы совпадают с типами, которые исполняет ядро.
 type Assert<T extends true> = T;

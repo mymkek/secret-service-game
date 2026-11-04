@@ -1,7 +1,7 @@
 // Сети за рубежом и заброска (§9.1), внедрённые агенты (§5.3), сеть информаторов (§4.4.1).
 import { BALANCE as B } from './balance';
 import { hasPerk } from './agents';
-import { borderFailChance, netAgentProgress, netFailChance, networkCap, zabroskaInfiltrateChance } from './formulas';
+import { borderFailChance, netAgentProgress, netFailChance, networkCap, recruitChance, zabroskaInfiltrateChance } from './formulas';
 import {
 	addBudget,
 	addExposure,
@@ -19,6 +19,7 @@ import {
 	setIdle
 } from './effects';
 import { hasOpenQuest, openQuest } from './quest-core';
+import { leaveCoverLife } from './dilemma-state';
 import { pickOne, roll } from './rng';
 import type { Agent, CountryId, GameState, KompromatTarget, Mission, Network, RecruitMethod } from './types';
 
@@ -152,10 +153,13 @@ export function monthEndNetworks(s: GameState): void {
 function monthEndEmbedded(s: GameState): void {
 	for (const a of [...s.agents]) {
 		if (a.status !== 'embedded' || !a.location) continue;
+		// §9.8 «Легенда требует личной жизни»: пока внедрён — раскрытие ×embedDetectMult.
+		const detect = B.EMBED_DETECT_CHANCE * (a.coverLife ? B.DL_COVER_LIFE.embedDetectMult : 1);
 		if ('rivalId' in a.location) {
 			const rid = a.location.rivalId;
 			if (roll(s, B.EMBED_KOMPROMAT_CHANCE)) addKompromat(s, { kind: 'rival', id: rid }, B.EMBED_KOMPROMAT_STRENGTH);
-			if (roll(s, B.EMBED_DETECT_CHANCE)) {
+			if (roll(s, detect)) {
+				leaveCoverLife(s, a);
 				setIdle(a);
 				a.loyalty = Math.max(0, a.loyalty + B.OP_INFILTRATION_FAIL.loyalty);
 				addExposure(s, B.OP_INFILTRATION_FAIL.exposure);
@@ -163,8 +167,9 @@ function monthEndEmbedded(s: GameState): void {
 				log(s, 'embedded_exposed', { agentId: a.id, rivalId: rid });
 			}
 		} else if ('leaderId' in a.location) {
-			if (roll(s, B.EMBED_DETECT_CHANCE)) {
+			if (roll(s, detect)) {
 				const lid = a.location.leaderId;
+				leaveCoverLife(s, a);
 				setIdle(a);
 				a.loyalty = Math.max(0, a.loyalty + B.OP_INFILTRATION_FAIL.loyalty);
 				addExposure(s, B.OP_INFILTRATION_FAIL.exposure);
@@ -230,7 +235,8 @@ export function attemptRecruit(s: GameState, m: Mission, a: Agent, method: Recru
 		const k = s.kompromat.find((x) => kompromatActive(s, x));
 		if (k) s.kompromat = s.kompromat.filter((x) => x.id !== k.id);
 	} else if (method === 'money') addBudget(s, -B.RECRUIT_METHODS.money.cost);
-	if (roll(s, B.RECRUIT_METHODS[method].p)) {
+	// §9.1 шаг 4, D-068: «Переговорщик» +0.10 к шансу вербовки, кламп 0.05..0.95.
+	if (roll(s, recruitChance(B.RECRUIT_METHODS[method].p, hasPerk(a, 'negotiator')))) {
 		const n = s.networks[m.countryId];
 		if (n.level === 0) n.level = 1;
 		if (method === 'kompromat') n.kompromatSource = true;

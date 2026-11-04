@@ -51,8 +51,12 @@ import {
 	rivalKompromat,
 	runCases,
 	surveil,
+	dlConfig,
 	type BotDef,
 	type BotTurn,
+	type DlMode,
+	type ElMode,
+	type LineMode,
 	type QuestPolicy
 } from './kit';
 
@@ -321,6 +325,7 @@ const monopoly: BotDef = {
 			['pr', 4]
 		];
 		return (s) => {
+			dlConfig.exclude = ops;
 			handleQuests(s, (st, q, av) => {
 				if (q.questId === 'senator_secret') return av.includes('blackmail') && st.investigation < 45 ? 'blackmail' : 'hold';
 				if (q.questId === 'hearings') return av.includes('testify') ? 'testify' : av[0];
@@ -526,6 +531,7 @@ const shadow: BotDef = {
 			return honestQuestPolicy(s, q, av);
 		};
 		return (s) => {
+			dlConfig.exclude = new Set(assigned.keys());
 			handleQuests(s, policy);
 			handlePerks(s);
 			// Приоритет ветки B: прочие траты ждут, пока не накоплено на следующую технологию.
@@ -728,6 +734,66 @@ export function honestCI(level: number): BotDef {
 	};
 }
 
+interface DlOpts {
+	dl: DlMode;
+	line: LineMode;
+	el?: ElMode | null;
+	sig?: string | null;
+	only?: string[] | null;
+	legacy?: boolean;
+	lineMinRoster?: number;
+}
+
+/** Естественная политика дилемм и линейки для каждой стратегии (D-067). */
+const DL_DEFAULTS: Record<string, DlOpts> = {
+	honest: { dl: 'honest', line: 'honest' },
+	clean: { dl: 'honest', line: 'honest' },
+	dirty: { dl: 'dirty', line: 'dirty' },
+	// Лучшая для пути политика по матрице r5-matrix: грязные варианты дилемм у «Монополии» и «Кардинала» вредят пути (следствие ≥ 50).
+	monopoly: { dl: 'honest', line: 'honest' },
+	'1984': { dl: 'honest', line: 'dirty' },
+	'1984-rb': { dl: 'honest', line: 'dirty' },
+	shadow: { dl: 'dirty', line: 'dirty' },
+	cardinal: { dl: 'honest', line: 'honest', el: 'announce' },
+	random: { dl: 'random', line: 'random' }
+};
+
+/** Выставляет dlConfig на время хода бота (как rosterLimit). */
+function withDl(b: BotDef, o: DlOpts): BotDef {
+	return {
+		...b,
+		make: (seed) => {
+			const t = b.make(seed);
+			const rng = botRng('dl:' + seed);
+			const only = o.only ? new Set(o.only) : null;
+			return (s) => {
+				const prev = { ...dlConfig };
+				dlConfig.dl = o.dl;
+				dlConfig.line = o.line;
+				dlConfig.el = o.el ?? null;
+				dlConfig.sig = o.sig ?? null;
+				dlConfig.only = only;
+				dlConfig.rng = rng;
+				dlConfig.exclude = new Set();
+				dlConfig.legacyTeams = !!o.legacy;
+				dlConfig.lineMinRoster = o.lineMinRoster ?? 7;
+				try {
+					t(s);
+				} finally {
+					Object.assign(dlConfig, prev);
+				}
+			};
+		}
+	};
+}
+
+function baseOf(name: string): string {
+	const b = name.replace(/@.*/, '');
+	if (b.startsWith('honest-ci')) return 'honest';
+	if (b.startsWith('dirty-fake-')) return 'dirty';
+	return b;
+}
+
 /** Аварийная защита от банкротства перед каждым ходом (как сделал бы игрок). */
 function guarded(b: BotDef): BotDef {
 	return { ...b, make: (seed) => { const t = b.make(seed); return (s) => { emergency(s); t(s); }; } };
@@ -745,11 +811,37 @@ export const BOTS: BotDef[] = [
 	random
 ];
 
+/**
+ * Имя бота: <база>[@потолок штата][#dl=default|honest|dirty|random][#line=decline|honest|dirty|random]
+ * [#el=silent|announce|leak][#sig=wait|legal|wiretap|detain][#only=valuable_source,sting][#legacy][#lmr=N]. Пример: clean@12#dl=default.
+ * Без опций — естественная политика стратегии (DL_DEFAULTS); ref — эталон ядра (autoChoice, вариант 0).
+ */
 export function botByName(full: string): BotDef {
+	const hash = full.indexOf('#');
+	const base = hash > 0 ? full.slice(0, hash) : full;
+	const raw = rawByName(base);
+	if (base === 'ref') return raw;
+	const o: DlOpts = { ...(DL_DEFAULTS[baseOf(base)] ?? { dl: 'default', line: 'decline' }) };
+	if (hash > 0)
+		for (const kv of full.slice(hash + 1).split('#')) {
+			const [k, v] = kv.split('=');
+			if (k === 'dl') o.dl = v as DlMode;
+			else if (k === 'line') o.line = v as LineMode;
+			else if (k === 'el') o.el = v as ElMode;
+			else if (k === 'sig') o.sig = v;
+			else if (k === 'only') o.only = v.split(',');
+			else if (k === 'legacy') o.legacy = true;
+			else if (k === 'lmr') o.lineMinRoster = Number(v);
+			else throw new Error('unknown bot option ' + kv);
+		}
+	return { ...withDl(raw, o), name: full };
+}
+
+function rawByName(full: string): BotDef {
 	const at = full.indexOf('@');
 	if (at > 0) {
 		const cap = Number(full.slice(at + 1));
-		const inner = botByName(full.slice(0, at));
+		const inner = rawByName(full.slice(0, at));
 		return { ...inner, name: full, make: (seed) => { const t = inner.make(seed); return (s) => { rosterLimit.cap = cap; try { t(s); } finally { rosterLimit.cap = Infinity; } }; } };
 	}
 	const name = full;

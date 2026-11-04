@@ -1,6 +1,7 @@
 // Точки входа квестов (§9): создание сессии и автопауза. Обработчики выборов — quests.ts.
 import { BALANCE as B } from './balance';
-import { autopause, dept, log, newId } from './effects';
+import { autopause, dept, forcePause, log, newId } from './effects';
+import { DILEMMA_QUEST_IDS } from './types';
 import type { AutopauseKey, GameState, QuestId, QuestSession } from './types';
 
 type Params = QuestSession['params'];
@@ -24,7 +25,9 @@ export function openQuest(s: GameState, questId: QuestId, params: Params = {}, s
 	};
 	s.quests.push(q);
 	log(s, 'quest_opened', { questId, sessionId: q.id });
-	autopause(s, AUTOPAUSE_BY_QUEST[questId] ?? 'questChoice');
+	// §3.4, §9.8: окна дилемм и этапов линейки модальные — пауза ставится всегда, флаг её не отключает.
+	if ((DILEMMA_QUEST_IDS as readonly string[]).includes(questId) && questId !== 'vanguard_result') forcePause(s, 'questChoice');
+	else autopause(s, AUTOPAUSE_BY_QUEST[questId] ?? 'questChoice');
 	return q;
 }
 

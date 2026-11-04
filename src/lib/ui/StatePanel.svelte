@@ -14,7 +14,7 @@
 
 <section class="card space-y-3" aria-label="Штат {stateName(stateId)}">
 	<div>
-		<h3 class="text-base font-semibold text-gold">{stateName(stateId)} <span class="text-xs text-muted">{stateId}</span></h3>
+		<h3 class="text-xl font-bold text-gold-bright">{stateName(stateId)} <span class="text-xs text-muted">{stateId}</span></h3>
 		{#if j}
 			<p class="text-sm text-muted">
 				{#if j.level >= 2}Полные полномочия ФБР

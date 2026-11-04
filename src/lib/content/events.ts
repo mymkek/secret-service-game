@@ -4,7 +4,7 @@
 // {cardTitle} {opName} {courseName} {rankName} {legendName} {methodName} {archetypeName}
 // {actionText} {ratioPct} {sharePct} {pathName} {hearingReason} {title} {resultText} {repLossRounded} {senatorName} {disbandDate}
 // Правила расширения - templates/events.md.
-import type { LogKind, PendingLogKind } from '../game/types';
+import type { DilemmaLogKind, LogKind, PendingLogKind } from '../game/types';
 
 type Sev = 'info' | 'success' | 'warning' | 'danger';
 
@@ -12,7 +12,7 @@ type Sev = 'info' | 'success' | 'warning' | 'danger';
 // станет пустым (never), а записи ниже останутся валидными: объединение типов не изменится.
 type EventTextDef = { text: string; severity: Sev };
 
-export const eventTexts: Record<LogKind | PendingLogKind, EventTextDef> = {
+export const eventTexts: Record<LogKind | PendingLogKind | DilemmaLogKind, EventTextDef> = {
 	rival_collapsing: {
 		text: '{rivalName} на грани краха: репутация обнулена. Он бездействует до {disbandDate} и может быть поглощён на льготных условиях.',
 		severity: 'success'
@@ -86,5 +86,53 @@ export const eventTexts: Record<LogKind | PendingLogKind, EventTextDef> = {
 	training_done: { text: '{agentName} закончил {courseName} и вернулся к делам.', severity: 'success' },
 	unrest_threshold: { text: 'Недовольство достигло порога {level}. Улицы напряжены.', severity: 'danger' },
 	victory: { text: 'Победа: {pathName}.', severity: 'success' },
-	zabroska_failed: { text: '{agentName} провалил заброску в страну {countryName}. Возвращаться ему некуда.', severity: 'danger' }
+	zabroska_failed: { text: '{agentName} провалил заброску в страну {countryName}. Возвращаться ему некуда.', severity: 'danger' },
+
+	// D-067: дилеммы и линейка «Народный авангард» (DILEMMA_LOG_KINDS). Данные записей - в game/dilemmas.ts, dilemma-state.ts, line.ts.
+	dilemma_burned: { text: 'Окно решения закрылось само: обстоятельства изменились быстрее, чем канцелярия.', severity: 'info' },
+	source_cases: { text: 'Ценный источник принёс новое дело. Благодарность ему выражена устно и без протокола.', severity: 'info' },
+	source_lost: { text: 'Источник передан правосудию. Осведомлённых людей в городе стало на одного меньше.', severity: 'warning' },
+	source_exposed: {
+		text: 'Источник разоблачён: всплыли эпизоды, которые ведомство считало «не относящимися к делу» (всего: {crimes}). Слушания неизбежны.',
+		severity: 'danger'
+	},
+	false_confession_culprit: {
+		text: 'В штате {stateName} появилось новое дело: настоящий виновный нашёлся, пока другой подписывал признание.',
+		severity: 'warning'
+	},
+	false_confession_review: {
+		text: 'Приговор по делу в штате {stateName} пересмотрен: признание признано недостоверным. Вопросы адресованы ведомству.',
+		severity: 'danger'
+	},
+	sting_case: {
+		text: 'В штате {stateName} появилось дело-провокация: заговор подготовлен при деятельном участии нашего осведомителя.',
+		severity: 'warning'
+	},
+	sting_judge: { text: 'Судья заметил провокацию: обвинение рассыпалось, пресса пишет о «заговоре, выращенном на казённые деньги».', severity: 'danger' },
+	signal_case: { text: 'В штате {stateName} заведено дело по «тихому сигналу». Работаем строго по процедуре, то есть не спеша.', severity: 'info' },
+	signal_prevented: { text: 'Угроза в штате {stateName} снята. В сводке сказано «оперативными мерами», подробности не уточняются.', severity: 'success' },
+	signal_false_alarm: { text: 'Сигнал в штате {stateName} оказался ложным. Задержанный отпущен с извинениями, к счастью, устными.', severity: 'warning' },
+	signal_attack: {
+		text: 'Случилось то, о чём предупреждали. Репутация и влияние пострадали, слушания назначены. Формулировка «не было оснований» теперь звучит как оправдание.',
+		severity: 'danger'
+	},
+	fudge_caught: { text: 'Аудит нашёл «ошибки в заявке» на ордер. Следователи интересуются, как они туда попали.', severity: 'danger' },
+	cover_scandal: {
+		text: 'Двойная жизнь {agentName} вышла наружу: скандал, объяснительные и один очень неловкий разговор с кадровой службой.',
+		severity: 'danger'
+	},
+	election_leak_revealed: { text: 'Источник анонимного слива перед выборами найден. Им оказались вы. Комиссия интересуется подробностями.', severity: 'danger' },
+	line_started: { text: '{agentName} ушёл в подполье по линии «Народного авангарда». В кадрах он числится в отпуске за свой счёт.', severity: 'info' },
+	line_stage_done: { text: 'Этап {stage} операции «Народный авангард» пройден без потерь. До следующего окна пауза.', severity: 'success' },
+	line_success: { text: 'Операция «Народный авангард» завершена успешно: {money} k$, очки плана {plan}. Агенты вернулись в штат.', severity: 'success' },
+	line_quiet: { text: 'Акция «Авангарда» сорвана тихо: {money} k$, очки плана {plan}. Громких процессов не будет.', severity: 'success' },
+	line_failed: {
+		text: 'Операция «Народный авангард» провалена на этапе {stage}. Засвеченность выросла, судьба агентов записана в личные дела.',
+		severity: 'danger'
+	},
+	line_recalled: { text: 'Операция «Народный авангард» свёрнута, агенты возвращены. Награды нет, отчёт есть.', severity: 'warning' },
+	line_exposed: {
+		text: 'Суд выяснил, что организатором акции «Авангарда» был наш агент. Репутация и следствие пострадали, слушания назначены.',
+		severity: 'danger'
+	}
 };

@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { selectOutcome, selectQuests, selectVictoryProgress } from '../game/index';
+	import { selectBlockingQuest, selectOutcome, selectQuests, selectVictoryProgress } from '../game/index';
 	import { game } from './game.svelte';
-	import Modal from './Modal.svelte';
+	import { Modal, Illustration, Button } from './kit';
 	import QuestDialog from './QuestDialog.svelte';
+	import Epilogue from './Epilogue.svelte';
 	import { cardText } from './content';
 	import { defeatTexts, victoryTexts } from '../content/index';
 	import { PATH_LABEL, rivalName } from './labels';
@@ -11,7 +12,9 @@
 
 	const outcome = $derived(game.s ? selectOutcome(game.s) : null);
 	const quests = $derived(game.s ? selectQuests(game.s) : []);
-	const openQuest = $derived(quests.find((q) => q.waitUntilDay === null && q.choices.length > 0 && !game.dismissedQuests.includes(q.id)) ?? null);
+	// Модальное окно дилеммы или линейки не откладывается: пока оно открыто, время стоит (§3.4).
+	const blockingQuest = $derived(game.s ? selectBlockingQuest(game.s) : null);
+	const openQuest = $derived(blockingQuest ?? quests.find((q) => q.waitUntilDay === null && q.choices.length > 0 && !game.dismissedQuests.includes(q.id)) ?? null);
 	const popup = $derived(game.popups[0] ?? null);
 	const progress = $derived(game.s ? selectVictoryProgress(game.s) : null);
 
@@ -26,16 +29,19 @@
 	const PROGRESS_ORDER = ['monopoly', 'cardinal', 'shadow', '1984', 'clean'] as const;
 </script>
 
-{#if outcome && outcome.status !== 'active'}
+{#if outcome && outcome.status !== 'active' && game.epilogueOpen}
+	<Epilogue onmenu={onmenu} onclose={() => (game.epilogueOpen = false)} />
+{:else if outcome && outcome.status !== 'active'}
 	<Modal title={outcome.status === 'won' ? 'Победа' : 'Поражение'} tone={outcome.status === 'won' ? 'good' : 'bad'} wide>
+		{#snippet art()}<Illustration name={outcome.status === 'won' ? 'victory' : 'defeat'} size={176} />{/snippet}
 		{@const end = outcome.status === 'won' ? (outcome.victoryPath ? victoryTexts[outcome.victoryPath] : null) : outcome.defeatReason ? defeatTexts[outcome.defeatReason] : null}
-		<p class="text-lg font-semibold">{end?.title ?? ''}</p>
-		<p>{end?.text ?? ''}</p>
-		{#if end}<p class="text-muted italic">{end.epigraph}</p>{/if}
+		<p class="font-protocol text-2xl font-bold">{end?.title ?? ''}</p>
+		<p class="font-protocol text-lg leading-relaxed">{end?.text ?? ''}</p>
+		{#if end}<p class="font-protocol text-lg text-muted italic">{end.epigraph}</p>{/if}
 		<dl class="grid grid-cols-3 gap-3">
-			<div class="card"><dt class="text-xs text-muted">Месяц партии</dt><dd class="text-xl font-semibold">{outcome.month ?? '—'}</dd></div>
-			<div class="card"><dt class="text-xs text-muted">День</dt><dd class="text-xl font-semibold">{outcome.day ?? '—'}</dd></div>
-			<div class="card"><dt class="text-xs text-muted">Очки</dt><dd class="text-xl font-semibold text-gold" data-testid="score">{outcome.score ?? '—'}</dd></div>
+			<div class="card-1"><dt class="text-xs text-muted">Месяц партии</dt><dd class="text-2xl font-bold">{outcome.month ?? '—'}</dd></div>
+			<div class="card-1"><dt class="text-xs text-muted">День</dt><dd class="text-2xl font-bold">{outcome.day ?? '—'}</dd></div>
+			<div class="card-1"><dt class="text-xs text-muted">Очки</dt><dd class="text-2xl font-bold text-gold" data-testid="score">{outcome.score ?? '—'}</dd></div>
 		</dl>
 		{#if progress}
 			<div>
@@ -48,32 +54,36 @@
 			</div>
 		{/if}
 		{#snippet footer()}
-			<button class="btn" onclick={onmenu}>Меню (сохранить/загрузить)</button>
-			<button class="btn btn-gold" onclick={() => game.newGame()}>Новая партия</button>
+			<Button icon="save" onclick={onmenu}>Меню (сохранить/загрузить)</Button>
+			<Button variant="gold" icon="document" onclick={() => (game.epilogueOpen = true)} data-testid="open-epilogue">Рассекретить: доклад комиссии</Button>
+			<Button variant="primary" icon="play" onclick={() => game.newGame()}>Новая партия</Button>
 		{/snippet}
 	</Modal>
 {:else if game.questResult}
 	<Modal title={game.questResult.title} tone="warn" onclose={() => (game.questResult = null)}>
-		{#each game.questResult.text as p, i (i)}<p>{p}</p>{/each}
+		{#snippet art()}<Illustration name="result" size={152} />{/snippet}
+		{#each game.questResult.text as p, i (i)}<p class="font-protocol text-lg leading-relaxed">{p}</p>{/each}
 		{#snippet footer()}
-			<button class="btn btn-gold" onclick={() => (game.questResult = null)}>Понятно</button>
+			<Button variant="primary" icon="check" onclick={() => (game.questResult = null)}>Понятно</Button>
 		{/snippet}
 	</Modal>
 {:else if popup && popup.kind === 'chance_card'}
 	{@const card = cardText(String(popup.data.cardId ?? ''))}
 	<Modal title="Карточка шанса: {card.title}" tone={tones[card.tone]} onclose={() => game.closePopup()}>
-		<p>{card.body}</p>
+		{#snippet art()}<Illustration name="chance" size={152} />{/snippet}
+		<p class="font-protocol text-lg leading-relaxed">{card.body}</p>
 		{#if popup.data.target}
 			<p class="text-muted">Затронуто: {popup.data.target === 'player' ? 'ваше ведомство' : rivalName(String(popup.data.target))}</p>
 		{/if}
 		{#snippet footer()}
-			<button class="btn" onclick={() => game.closePopup()}>Закрыть</button>
-			<button class="btn btn-gold" onclick={continueGame}>Продолжить игру</button>
+			<Button onclick={() => game.closePopup()}>Закрыть</Button>
+			<Button variant="primary" icon="play" onclick={continueGame}>Продолжить игру</Button>
 		{/snippet}
 	</Modal>
 {:else if popup && popup.kind === 'quarter_report'}
 	{@const d = popup.data}
 	<Modal title="Квартальный отчёт: Q{d.quarter}" tone={Number(d.ratio) >= 1 ? 'good' : 'warn'} onclose={() => game.closePopup()}>
+		{#snippet art()}<Illustration name="report" size={152} />{/snippet}
 		<dl class="grid grid-cols-2 gap-x-6 gap-y-1">
 			<dt class="text-muted">Очки плана</dt><dd class="text-right tabular-nums">{num(d.points, 1)} из {num(d.target, 1)}</dd>
 			<dt class="text-muted">Фальшивые очки</dt><dd class="text-right tabular-nums">{num(d.fakePoints, 1)}</dd>
@@ -84,18 +94,19 @@
 		</dl>
 		{#if d.caught}<p class="text-danger">Фальсификацию раскрыли!</p>{/if}
 		{#snippet footer()}
-			<button class="btn" onclick={() => game.closePopup()}>Закрыть</button>
-			<button class="btn btn-gold" onclick={continueGame}>Продолжить игру</button>
+			<Button onclick={() => game.closePopup()}>Закрыть</Button>
+			<Button variant="primary" icon="play" onclick={continueGame}>Продолжить игру</Button>
 		{/snippet}
 	</Modal>
 {:else if popup && popup.kind === 'election'}
 	<Modal title="Президентские выборы" tone={popup.data.newAdmin ? 'warn' : 'good'} onclose={() => game.closePopup()}>
-		<p>
+		{#snippet art()}<Illustration name="election" size={152} />{/snippet}
+		<p class="font-protocol text-lg leading-relaxed">
 			{#if popup.data.newAdmin}К власти пришла новая администрация. Приоритеты финансирования пересмотрены, ваше влияние ослаблено.
 			{:else}Действующий президент переизбран. Курс не изменился.{/if}
 		</p>
 		{#snippet footer()}
-			<button class="btn btn-gold" onclick={continueGame}>Продолжить игру</button>
+			<Button variant="primary" icon="play" onclick={continueGame}>Продолжить игру</Button>
 		{/snippet}
 	</Modal>
 {:else if openQuest}

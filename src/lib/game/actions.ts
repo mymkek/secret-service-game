@@ -64,11 +64,15 @@ import { blackmail, questChoiceError, resolveQuestChoice, scapegoat } from './qu
 import { addRivalPlan, checkRivalCollapse, removeRival } from './rivals';
 import { removeLeader, rollbackRepression } from './society';
 import { roll } from './rng';
+import { OP_DILEMMA_DEFAULTS, leaveCoverLife } from './dilemma-state';
+import { assignOpDilemma, dropOpDilemmas } from './dilemmas';
+import { recallLine } from './line';
 import type {
 	Actor,
 	DeptKey,
 	GameState,
 	Legend,
+	Operation,
 	OpTarget,
 	OpType,
 	PerkId,
@@ -114,7 +118,9 @@ export type PlayerAction =
 	| { type: 'removeLeader'; leaderId: number }
 	| { type: 'deployAgent'; agentId: number; countryId: string; legend: Legend; prep: boolean; recruit: RecruitMethod }
 	| { type: 'recallAgent'; agentId: number }
-	| { type: 'questChoice'; sessionId: number; choice: string; param?: number };
+	| { type: 'questChoice'; sessionId: number; choice: string; param?: number }
+	/** §9.9: отозвать агентов линейки «Народный авангард» в паузе между этапами. */
+	| { type: 'lineRecall' };
 
 export type RivalAction = { type: 'ai'; action: AiActionType };
 export type GameAction = PlayerAction | RivalAction;
@@ -354,18 +360,22 @@ function handlePlayer(s: GameState, a: PlayerAction, dry: boolean): string | nul
 			const c = s.cases.find((x) => x.id === op.caseId);
 			if (c) c.takenByOpId = null;
 			s.operations = s.operations.filter((o) => o.id !== op.id);
+			dropOpDilemmas(s, op.id); // §9.8, D-069: дилемма сгорает и снимает свои откаты
 			log(s, 'op_cancelled', { opId: op.id });
 			return null;
 		}
 		case 'recallEmbedded': {
 			const ag = agentById(s, a.agentId);
 			if (!ag || ag.status !== 'embedded') return 'agent_not_embedded';
+			// Агенты линейки §9.9 отзываются только всей линейкой (lineRecall или окно этапа).
+			if (ag.location && 'lineId' in ag.location) return 'agent_on_line';
 			if (dry) return null;
 			const loc = ag.location;
 			if (loc && 'leaderId' in loc) {
 				const l = s.leaders.find((x) => x.id === loc.leaderId);
 				if (l) l.underWatch = false;
 			}
+			leaveCoverLife(s, ag); // §9.8: «Двойная жизнь агента» при отзыве
 			setIdle(ag);
 			return null;
 		}
@@ -414,11 +424,13 @@ function handlePlayer(s: GameState, a: PlayerAction, dry: boolean): string | nul
 			const hr = holder ? aliveRival(s, holder) : null;
 			// D-047: без держателя план никому не режется; при неудаче только влияние, без обиды.
 			if (hr) addRivalPlan(hr, I.targetPlan);
-			if (roll(s, I.riskChance)) {
+			const risk = roll(s, I.riskChance);
+			if (risk) {
 				addInfluence(s, I.riskInfluence);
 				grudge(s, hr?.id ?? null, I.grudgeDays);
 			}
-			log(s, 'intercept', { caseId: c.id, rivalId: hr?.id ?? null });
+			// data.risk — сработал ли риск ACT_INTERCEPT.riskChance (тот же бросок, без нового RNG).
+			log(s, 'intercept', { caseId: c.id, rivalId: hr?.id ?? null, risk });
 			return null;
 		}
 		case 'sabotage': {
@@ -441,6 +453,7 @@ function handlePlayer(s: GameState, a: PlayerAction, dry: boolean): string | nul
 				addReputation(s, S.revealRep);
 				addExposure(s, S.revealExposure);
 				addInvestigation(s, S.revealInvestigation);
+				leaveCoverLife(s, ag); // §9.8 (а): внедрённый раскрыт
 				removeAgent(s, ag.id);
 			}
 			log(s, 'sabotage', { rivalId: r.id, revealed });
@@ -455,8 +468,10 @@ function handlePlayer(s: GameState, a: PlayerAction, dry: boolean): string | nul
 			addBudget(s, -L.cost);
 			addInfluence(s, -L.influence);
 			r.lobbyMult = Math.max(L.multMin, r.lobbyMult * L.targetMult);
-			if (roll(s, L.backfireChance)) addInfluence(s, L.backfireInfluence);
-			log(s, 'lobby', { rivalId: r.id });
+			const backfire = roll(s, L.backfireChance);
+			if (backfire) addInfluence(s, L.backfireInfluence);
+			// data.backfire — сработал ли обратный эффект ACT_LOBBY.backfireChance (тот же бросок).
+			log(s, 'lobby', { rivalId: r.id, backfire });
 			return null;
 		}
 		case 'poach': {
@@ -641,6 +656,12 @@ function handlePlayer(s: GameState, a: PlayerAction, dry: boolean): string | nul
 			});
 			return null;
 		}
+		case 'lineRecall': {
+			if (!s.line) return 'no_line';
+			if (s.line.stageEndDay !== null) return 'line_stage_running';
+			if (dry) return null;
+			return recallLine(s);
+		}
 		case 'questChoice': {
 			const q = s.quests.find((x) => x.id === a.sessionId);
 			if (!q) return 'quest_not_found';
@@ -686,7 +707,8 @@ function startOp(s: GameState, a: Extract<PlayerAction, { type: 'startOp' }>, dr
 	const illegal = target?.kind === 'senator' || target?.kind === 'president';
 	const warrant = a.opType === 'surveillance' && s.survLevel < 6 && !illegal ? warrantDays(dept(s, 'legal')) : 0;
 	const id = newId(s);
-	s.operations.push({
+	const op: Operation = {
+		...OP_DILEMMA_DEFAULTS,
 		id,
 		type: a.opType,
 		caseId,
@@ -699,12 +721,15 @@ function startOp(s: GameState, a: Extract<PlayerAction, { type: 'startOp' }>, dr
 		cost,
 		difficulty,
 		dirty
-	});
+	};
+	s.operations.push(op);
 	for (const ag of team) if (ag) ag.status = 'on_op';
 	if (caseId !== null) s.cases.find((x) => x.id === caseId)!.takenByOpId = id;
 	if (illegal) dirtyExposure(s, B.ILLEGAL_TARGET_EXPOSURE);
 	if (dirty) markDirty(s);
 	log(s, 'op_started', { opId: id, type: a.opType, caseId });
+	// §9.8: бросок операционной дилеммы при старте (фаза start открывает окно сразу).
+	assignOpDilemma(s, op);
 	return null;
 }
 
@@ -718,6 +743,7 @@ export function tickTasks(s: GameState): void {
 			for (const ag of [...s.agents]) {
 				if (!ag.moleFor) continue;
 				if (roll(s, p)) {
+					leaveCoverLife(s, ag); // §9.8 (а): крот раскрыт
 					removeAgent(s, ag.id);
 					log(s, 'mole_found', { agentId: ag.id, rivalId: ag.moleFor });
 				}

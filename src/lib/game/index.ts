@@ -27,6 +27,7 @@ export {
 	inkVariables,
 	setInkState,
 	QUEST_IDS,
+	ALL_QUEST_IDS,
 	QUEST_AGENT_CHOICES,
 	QUEST_KOMPROMAT_CHOICES,
 	type QuestChoice
@@ -40,6 +41,9 @@ export {
 	type InkExternalName
 } from './content-schema';
 export * from './selectors';
+export { DILEMMA_CHOICE_IDS, OP_DILEMMA_QUEST, isModalQuest, isDilemmaQuest, blockingSession, type DilemmaChoice } from './dilemmas';
+export { lineStageChance, lineSkill, canLeadLine } from './line';
+export { riskLevel } from './dilemma-state';
 export { victoryConditions } from './victory';
 export * as formulas from './formulas';
 export * from './types';

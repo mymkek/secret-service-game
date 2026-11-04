@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { confirmAction } from '../../lib/ui/confirm.svelte';
+	import { fireInfo, hireInfo } from '../../lib/ui/action-info';
 	import {
 		BALANCE,
 		PERKS,
@@ -50,12 +52,12 @@
 							<div class="font-semibold">{game.agentName(a)}</div>
 							<div class="text-xs text-muted">{RANK_LABEL[a.rank]} · ур. {a.level} · опыт {Math.floor(a.xp)}</div>
 						</div>
-						<span class="chip {a.status === 'idle' ? 'border-ok text-ok' : ''}">{STATUS_LABEL[a.status] ?? a.status}</span>
+						<span class="chip {a.status === 'idle' ? 'border-ok text-ok' : ''}">{a.location && 'lineId' in a.location ? 'На линейке «Народный авангард»' : (STATUS_LABEL[a.status] ?? a.status)}</span>
 					</header>
 
 					<div class="grid grid-cols-4 gap-1 text-center text-xs">
 						{#each SKILLS as k (k)}
-							<div class="rounded bg-bg py-1" title={SKILL_LABEL[k]}>
+							<div class="rounded-lg bg-surface-1 py-1" title={SKILL_LABEL[k]}>
 								<div class="text-muted">{SKILL_LABEL[k]}</div>
 								<div class="font-semibold tabular-nums">{a.skills[k]}</div>
 							</div>
@@ -71,12 +73,12 @@
 					</div>
 
 					{#if a.pendingPerks > 0}
-						<div class="rounded border border-gold/50 bg-gold/10 p-2">
+						<div class="rounded-xl border border-gold/50 bg-gold/10 p-3">
 							<div class="mb-1 text-xs text-gold">Выберите перк ({a.pendingPerks}):</div>
 							<div class="flex flex-wrap gap-1">
 								{#each PERKS.filter((p) => !a.perks.includes(p)) as p (p)}
 									{@const e = err({ type: 'choosePerk', agentId: a.id, perk: p })}
-									<button class="btn px-2 py-0.5 text-xs" disabled={!!e} title={errorText(e)} onclick={() => game.act({ type: 'choosePerk', agentId: a.id, perk: p })}>{PERK_LABEL[p]}</button>
+									<button class="btn btn-sm" disabled={!!e} title={errorText(e)} onclick={() => game.act({ type: 'choosePerk', agentId: a.id, perk: p })}>{PERK_LABEL[p]}</button>
 								{/each}
 							</div>
 						</div>
@@ -86,7 +88,6 @@
 						<label class="flex items-center gap-1 text-xs text-muted">
 							Зарплата
 							<select
-								class="rounded border border-line bg-bg px-1 py-0.5 text-ink"
 								value={a.salaryMult}
 								onchange={(e) => game.act({ type: 'setSalary', agentId: a.id, mult: Number(e.currentTarget.value) })}
 								aria-label="Множитель зарплаты: {game.agentName(a)}"
@@ -95,34 +96,34 @@
 							</select>
 						</label>
 						<button
-							class="btn px-2 py-0.5 text-xs"
+							class="btn btn-sm"
 							disabled={!!err({ type: 'medal', agentId: a.id })}
 							title={errorText(err({ type: 'medal', agentId: a.id })) || `Лояльность +${BALANCE.MEDAL_LOYALTY}`}
 							onclick={() => game.act({ type: 'medal', agentId: a.id }, 'Медаль вручена')}
 						>
 							Медаль ({BALANCE.MEDAL_COST} k$)
 						</button>
-						<button class="btn btn-danger ml-auto px-2 py-0.5 text-xs" onclick={() => game.act({ type: 'fire', agentId: a.id }, 'Агент уволен')}>Уволить</button>
+						<button class="btn btn-danger ml-auto btn-sm" onclick={() => confirmAction.ask(fireInfo(game.agentName(a)), () => game.act({ type: 'fire', agentId: a.id }, 'Агент уволен'))}>Уволить</button>
 					</div>
 
 					{#if a.status === 'idle'}
 						{@const ta = trainAction(a.id)}
 						{@const te = err(ta)}
-						<div class="flex flex-wrap items-center gap-1 border-t border-line pt-2">
+						<div class="flex flex-wrap items-center gap-1 border-t border-white/10 pt-2">
 							<span class="text-xs text-muted">Обучение:</span>
-							<select class="rounded border border-line bg-bg px-1 py-0.5 text-xs" value={c} onchange={(e) => (course[a.id] = e.currentTarget.value as 'skill')} aria-label="Курс: {game.agentName(a)}">
+							<select class="text-xs" value={c} onchange={(e) => (course[a.id] = e.currentTarget.value as 'skill')} aria-label="Курс: {game.agentName(a)}">
 								{#each ['skill', 'language', 'legend'] as k (k)}<option value={k}>{COURSE_LABEL[k]}</option>{/each}
 							</select>
 							{#if c === 'skill'}
-								<select class="rounded border border-line bg-bg px-1 py-0.5 text-xs" value={skill[a.id] ?? 'surveillance'} onchange={(e) => (skill[a.id] = e.currentTarget.value as SkillKey)} aria-label="Навык">
+								<select class="text-xs" value={skill[a.id] ?? 'surveillance'} onchange={(e) => (skill[a.id] = e.currentTarget.value as SkillKey)} aria-label="Навык">
 									{#each SKILLS as k (k)}<option value={k}>{SKILL_LABEL[k]}</option>{/each}
 								</select>
 							{:else if c === 'language'}
-								<select class="rounded border border-line bg-bg px-1 py-0.5 text-xs" value={country[a.id] ?? countries[0]} onchange={(e) => (country[a.id] = e.currentTarget.value)} aria-label="Язык">
+								<select class="text-xs" value={country[a.id] ?? countries[0]} onchange={(e) => (country[a.id] = e.currentTarget.value)} aria-label="Язык">
 									{#each countries as k (k)}<option value={k}>{countryName(k)}</option>{/each}
 								</select>
 							{/if}
-							<button class="btn px-2 py-0.5 text-xs" disabled={!!te} title={errorText(te)} onclick={() => game.act(ta, 'Обучение начато')}>
+							<button class="btn btn-sm" disabled={!!te} title={errorText(te)} onclick={() => game.act(ta, 'Обучение начато')}>
 								{cost(c)} k$ · {days(c)} дн.
 							</button>
 						</div>
@@ -150,16 +151,16 @@
 				</div>
 				<div class="grid grid-cols-4 gap-1 text-center text-xs">
 					{#each SKILLS as k (k)}
-						<div class="rounded bg-bg py-0.5"><span class="text-muted">{SKILL_LABEL[k][0]}</span> <strong>{c.skills[k]}</strong></div>
+						<div class="rounded-lg bg-surface-1 py-0.5"><span class="text-muted">{SKILL_LABEL[k][0]}</span> <strong>{c.skills[k]}</strong></div>
 					{/each}
 				</div>
 				<div class="flex flex-wrap items-center gap-1 text-xs">
 					{#each c.traits as t (t)}<span class="chip" title={traitDesc(t)}>{traitName(t)}</span>{/each}
 					<button
-						class="btn btn-gold ml-auto px-3 py-1 text-xs"
+						class="btn btn-gold ml-auto btn-sm"
 						disabled={!!c.canHire}
 						title={errorText(c.canHire)}
-						onclick={() => game.act({ type: 'hire', candidateId: c.id }, 'Агент принят')}>Нанять</button
+						onclick={() => confirmAction.ask(hireInfo(game.agentName(c), c.hireCost, c.salary), () => game.act({ type: 'hire', candidateId: c.id }, 'Агент принят'))}>Нанять</button
 					>
 				</div>
 				{#if c.canHire}<div class="text-xs text-warn">{errorText(c.canHire)}</div>{/if}

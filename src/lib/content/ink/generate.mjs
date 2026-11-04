@@ -22,7 +22,11 @@ function safe(text, where) {
 	return text;
 }
 
+let generated = 0;
 for (const [questId, q] of Object.entries(data)) {
+	// Дилеммы и линейка (D-067) написаны вручную: они читают risk_*, chance_*, p_* и ветвятся по стадии.
+	if (q.handwritten) continue;
+	generated += 1;
 	const lines = [];
 	lines.push(`// GENERATED из quests.data.json (node src/lib/content/ink/generate.mjs). Не править руками.`);
 	lines.push(`// Квест: ${questId}`);
@@ -73,4 +77,4 @@ for (const [questId, q] of Object.entries(data)) {
 	lines.push('');
 	writeFileSync(join(here, `${questId}.ink`), lines.join('\n'), 'utf8');
 }
-console.log(`Сгенерировано квестов: ${Object.keys(data).length}`);
+console.log(`Сгенерировано квестов: ${generated} (рукописные пропущены: ${Object.keys(data).length - generated})`);

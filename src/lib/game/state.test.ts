@@ -36,7 +36,7 @@ describe('createGame (§2.1, §4, §6, §11.3)', () => {
 		expect(s.exposure).toBe(10);
 		expect(s.unrest).toBe(15);
 		expect(s.departments).toEqual(B.START_DEPARTMENTS);
-		expect(s.agents.filter((a) => a.rank === 'novice')).toHaveLength(4);
+		expect(s.agents.filter((a) => a.rank === 'novice')).toHaveLength(B.START_ROSTER.novice);
 		expect(s.agents.filter((a) => a.rank === 'experienced')).toHaveLength(2);
 		expect(s.agents.every((a) => a.traits.length === 0)).toBe(true);
 		expect(s.hirePool).toHaveLength(B.HIRE_POOL_SIZE);

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmAction } from '../../lib/ui/confirm.svelte';
 	import { selectCases, selectResources,
 		selectSenators, validateAction, type OpTarget } from '../../lib/game/index';
 	import { senatorName } from '../../lib/ui/content';
@@ -6,6 +7,8 @@
 	import CaseCard from '../../lib/ui/CaseCard.svelte';
 	import OpForm from '../../lib/ui/OpForm.svelte';
 	import OperationList from '../../lib/ui/OperationList.svelte';
+	import CompletedCases from '../../lib/ui/CompletedCases.svelte';
+	import LinePanel from '../../lib/ui/LinePanel.svelte';
 	import { OP_LABEL, errorText, rivalName } from '../../lib/ui/labels';
 
 	const cases = $derived(
@@ -54,6 +57,7 @@
 	</section>
 
 	<div class="space-y-4">
+		<LinePanel />
 		<section class="card" aria-label="Активные операции">
 			<h2 class="h2">Активные операции</h2>
 			<OperationList />
@@ -62,11 +66,11 @@
 		<section class="card space-y-2" aria-label="Операция по цели">
 			<h2 class="h2">Операция по цели</h2>
 			<div class="flex flex-wrap gap-2">
-				<select class="rounded border border-line bg-bg px-2 py-1.5 text-sm" bind:value={tOp} aria-label="Тип операции">
+				<select bind:value={tOp} aria-label="Тип операции">
 					<option value="surveillance">{OP_LABEL.surveillance}</option>
 					<option value="infiltration">{OP_LABEL.infiltration}</option>
 				</select>
-				<select class="min-w-0 flex-1 rounded border border-line bg-bg px-2 py-1.5 text-sm" bind:value={tKey} aria-label="Цель операции">
+				<select class="min-w-0 flex-1" bind:value={tKey} aria-label="Цель операции">
 					<option value="">Выберите цель…</option>
 					{#each targets as t (t.key)}<option value={t.key}>{t.label}</option>{/each}
 				</select>
@@ -85,11 +89,13 @@
 				</p>
 				<div class="flex items-center gap-2">
 					<label class="text-xs text-muted" for="fake-pts">Нарисовать очков (до {res.plan.fakeMax}):</label>
-					<input id="fake-pts" type="number" min="1" bind:value={fake} class="w-16 rounded border border-line bg-bg px-2 py-1 text-sm" />
-					<button class="btn btn-danger text-xs" disabled={!!fakeErr} title={errorText(fakeErr)} onclick={() => game.act({ type: 'fakeStats', points: fake }, 'Статистика «улучшена»')}>Фальсифицировать</button>
+					<input id="fake-pts" type="number" min="1" bind:value={fake} class="w-20" />
+					<button class="btn btn-danger text-xs" disabled={!!fakeErr} title={errorText(fakeErr)} onclick={() => confirmAction.ask({ title: 'Фальсификация статистики', what: `В отчёт плана добавляются фальшивые очки: ${fake}. Риск раскрытия растёт квадратично с накопленными фальшивками.`, costs: [{ label: 'Фальшивых очков', value: String(fake) }], risks: [{ label: 'Раскрытие', value: 'растёт с каждой фальшивкой', tone: 'danger' }], dirty: true, confirmLabel: 'Фальсифицировать', art: 'report' }, () => game.act({ type: 'fakeStats', points: fake }, 'Статистика «улучшена»'))}>Фальсифицировать</button>
 				</div>
 				<p class="text-xs text-muted">Риск раскрытия растёт квадратично с накопленными фальшивками.</p>
 			</section>
 		{/if}
 	</div>
 </div>
+
+<div class="mt-6"><CompletedCases /></div>

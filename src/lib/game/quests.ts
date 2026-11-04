@@ -27,9 +27,11 @@ import { attemptRecruit, captureAbroad, crossBorder, defaultRecruitMethod, recru
 import { addRivalPlan } from './rivals';
 import { addLeaderInfluence, recomputeControl, rollbackRepression } from './society';
 import { clamp } from './formulas';
+import { applyDilemmaChoice, dilemmaChoices, isDilemmaQuest } from './dilemmas';
+import { applyLineChoice, lineChoices, lineSkill } from './line';
 import { pickOne, randInt, roll } from './rng';
-import type { GameState, KompromatItem, QuestId, QuestSession, RecruitMethod, RivalId } from './types';
-import { RECRUIT_METHODS } from './types';
+import type { GameState, KompromatItem, QuestId, QuestSession, RecruitMethod, RiskLevel, RivalId } from './types';
+import { DILEMMA_QUEST_IDS, RECRUIT_METHODS } from './types';
 
 export interface QuestChoice {
 	id: string;
@@ -42,6 +44,12 @@ export interface QuestChoice {
 	/** Выбор тратит компромат: UI может дать выбрать предмет из kompromatIds (param). */
 	needsKompromat?: true;
 	kompromatIds?: number[];
+	/** Вариант с пометкой «грязное» (§9.8, §9.9): грязное действие, закрывает «Чистые руки». */
+	dirty?: true;
+	/** Скрытый риск варианта — только метка low/medium/high (§9.8), точный шанс не отдаётся. */
+	risk?: RiskLevel;
+	/** Точный шанс, который ГДД велит показывать (этап линейки §9.9). */
+	chance?: number;
 }
 
 /** Выборы, которым нужен свободный агент (param = agentId). */
@@ -108,6 +116,7 @@ export function questChoices(s: GameState, q: QuestSession): QuestChoice[] {
 	const ag = QUEST_AGENT_CHOICES[q.questId] ?? [];
 	const km = QUEST_KOMPROMAT_CHOICES[q.questId] ?? [];
 	return base.map((c) => {
+		if (c.needsAgent) return c;
 		if (ag.includes(c.id))
 			return { ...c, needsAgent: true as const, agentIds: s.agents.filter((a) => a.status === 'idle').map((a) => a.id) };
 		if (km.includes(c.id))
@@ -129,6 +138,7 @@ export function questChoiceError(s: GameState, q: QuestSession, choiceId: string
 
 function baseChoices(s: GameState, q: QuestSession): QuestChoice[] {
 	if (q.waitUntilDay !== null) return [];
+	if (isDilemmaQuest(q.questId)) return q.questId.startsWith('vanguard_') ? lineChoices(s, q) : dilemmaChoices(s, q);
 	const idle = firstIdle(s) !== null;
 	const komp = anyKompromat(s) !== null;
 	const money = (n: number) => s.budget >= n;
@@ -196,6 +206,8 @@ export function resolveQuestChoice(s: GameState, sessionId: number, choiceId: st
 
 /** true — сессия закрыта. */
 function applyChoice(s: GameState, q: QuestSession, choice: string, param: number | null): boolean {
+	if (isDilemmaQuest(q.questId))
+		return q.questId.startsWith('vanguard_') ? applyLineChoice(s, q, choice, param) : applyDilemmaChoice(s, q, choice);
 	const leader = leaderOf(s, q);
 	switch (q.questId) {
 		case 'hearings': {
@@ -523,8 +535,35 @@ export function inkVariables(s: GameState, q: QuestSession): Record<string, numb
 		repr_level: s.reprLevel,
 		surv_level: s.survLevel,
 		legal_level: dept(s, 'legal'),
-		...Object.fromEntries(Object.entries(q.params).map(([k, v]) => [`p_${k}`, v]))
+		...Object.fromEntries(Object.entries(q.params).map(([k, v]) => [`p_${k}`, v])),
+		...(isDilemmaQuest(q.questId) ? dilemmaInkVariables(s, q) : {})
 	};
+}
+
+/**
+ * Переменные окон дилемм и линейки (D-067): risk_<choiceId> = 'low'|'medium'|'high'|'',
+ * chance_<choiceId> = шанс этапа в процентах (только линейка, иначе -1), dirty_<choiceId>,
+ * а также состояние линейки и выборов. Скрытые броски в переменные не попадают.
+ */
+function dilemmaInkVariables(s: GameState, q: QuestSession): Record<string, number | string | boolean | null> {
+	const out: Record<string, number | string | boolean | null> = {};
+	for (const c of questChoices(s, q)) {
+		out[`risk_${c.id}`] = c.risk ?? '';
+		out[`chance_${c.id}`] = c.chance === undefined ? -1 : Math.round(c.chance * 100);
+		out[`dirty_${c.id}`] = c.dirty === true;
+	}
+	const lead = s.line ? s.agents.find((a) => a.id === s.line!.leadId) : undefined;
+	out.line_stage = s.line?.stage ?? 0;
+	out.line_has_partner = !!s.line?.partnerId;
+	out.line_lead_id = s.line?.leadId ?? -1;
+	out.line_lead_skill = lead ? lineSkill(lead) : 0;
+	out.line_variant2 = s.line?.variant2 ?? -1;
+	out.line_variant3 = s.line?.variant3 ?? -1;
+	out.source_active = s.valuableSource !== null;
+	out.source_crimes = s.valuableSource?.crimes ?? 0;
+	out.election_month = B.ELECTION_MONTH;
+	out.election_meddling = s.history.electionMeddling;
+	return out;
 }
 
 /** Сохранить непрозрачное состояние Ink в сессии. */
@@ -550,4 +589,7 @@ export const QUEST_IDS: readonly QuestId[] = [
 	'plan_warning',
 	'director_questioning'
 ];
+
+/** Все точки входа ядра: QUEST_IDS + окна дилемм и линейки (DILEMMA_QUEST_IDS, D-067). */
+export const ALL_QUEST_IDS: readonly QuestId[] = [...QUEST_IDS, ...DILEMMA_QUEST_IDS];
 

@@ -28,7 +28,7 @@ const bundle = {
 		}
 	],
 	events: [{ kind: 'scandal', text: 'Скандал! Репутация −{repLoss}.', severity: 'danger' }],
-	cases: [{ id: 'bank_robbery', caseKind: 'regular', minDifficulty: 1, maxDifficulty: 3, title: 'Ограбление', description: 'Банк.' }],
+	cases: [{ id: 'bank_robbery', caseKind: 'regular', minDifficulty: 1, maxDifficulty: 3, title: 'Ограбление', description: 'Банк.', success: ['Взяли.'], fail: ['Ушли.'] }],
 	states: [{ id: 'CA', name: 'Калифорния', caseWeight: 3 }],
 	senators: [{ id: 'senator_1', name: 'Сенатор Смит' }],
 	countries: [{ id: 'canada', name: 'Канада' }],

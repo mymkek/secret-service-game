@@ -1,6 +1,7 @@
 // Одна партия бота до конца + сбор метрик. Чистая функция от (бот, зерно, правки BALANCE).
 import { BALANCE as B, advance, createGame, type GameState, type LogEntry } from '../src/lib/game/index';
 import { botByName } from './bots';
+import { teamStats } from './kit';
 
 export const CURVE_KEYS = ['budget', 'reputation', 'exposure', 'investigation', 'unrest', 'influence', 'share', 'agents', 'control'] as const;
 export type CurveKey = (typeof CURVE_KEYS)[number];
@@ -65,7 +66,14 @@ function inc(c: Record<string, number>, k: string, n = 1) {
 	c[k] = (c[k] ?? 0) + n;
 }
 
-function countEvent(s: GameState, e: LogEntry, c: Record<string, number>, f: Record<string, number | null>) {
+/** Состояние трекинга D-066/D-067 в партии (команды, теги дел, линейка). */
+interface Track {
+	opTeam: Map<number, { type: string; size: number }>;
+	caseTag: Map<number, string>;
+	lineMoneyPending: number;
+}
+
+function countEvent(s: GameState, e: LogEntry, c: Record<string, number>, f: Record<string, number | null>, tr?: Track) {
 	const m = Math.max(1, Math.ceil(e.day / 30));
 	const first = (k: string) => {
 		if (f[k] === undefined || f[k] === null) f[k] = m;
@@ -97,8 +105,45 @@ function countEvent(s: GameState, e: LogEntry, c: Record<string, number>, f: Rec
 			if (e.data.revealed) inc(c, 'sabotageRevealed');
 			break;
 		case 'op_success':
-		case 'op_fail':
+		case 'op_fail': {
 			inc(c, `${e.kind}_${e.data.type}`);
+			const t = tr?.opTeam.get(Number(e.data.opId));
+			if (t) inc(c, `team_${e.data.type}_${t.size}`);
+			if (e.data.type === 'terror' && e.data.killedAgentIds) inc(c, 'terror_deaths', String(e.data.killedAgentIds).split(',').length);
+			const tag = e.data.caseId !== null && e.data.caseId !== undefined ? tr?.caseTag.get(Number(e.data.caseId)) : undefined;
+			if (tag) inc(c, `tag_${tag}_${e.kind === 'op_success' ? 'ok' : 'fail'}`);
+			break;
+		}
+		case 'quest_opened':
+			inc(c, 'qo_' + String(e.data.questId));
+			break;
+		case 'quarter_report': {
+			inc(c, 'quarter_report');
+			const cb = Number(e.data.clawback ?? 0);
+			inc(c, 'clawback_total', cb);
+			if (cb > 0) inc(c, 'clawback_q');
+			inc(c, 'plan_points_total', Number(e.data.points ?? 0));
+			if (tr && tr.lineMoneyPending > 0) {
+				inc(c, 'claw_after_line', cb);
+				inc(c, 'line_money_seen', tr.lineMoneyPending);
+				tr.lineMoneyPending = 0;
+			}
+			break;
+		}
+		case 'line_success':
+			inc(c, 'line_success_' + String(e.data.variant));
+			if (tr) tr.lineMoneyPending += Number(e.data.money ?? 0);
+			break;
+		case 'line_failed':
+			inc(c, 'line_failed_' + String(e.data.outcome));
+			inc(c, 'line_failed');
+			break;
+		case 'dilemma_burned':
+			inc(c, 'dilemma_burned');
+			inc(c, `burn_${e.data.dilemmaId}_${e.data.why}`);
+			break;
+		case 'line_recalled':
+			inc(c, 'line_recalled');
 			break;
 		case 'tech_done':
 			first('tech_' + e.data.techId);
@@ -133,6 +178,7 @@ export interface PlayOpts {
 
 export function playGame(botName: string, seed: string, o: PlayOpts = {}): GameRecord {
 	const bot = botByName(botName).make(seed);
+	teamStats.reinforced = 0;
 	const s = createGame({ seed });
 	o.setup?.(s);
 	const step = o.step ?? 3;
@@ -155,13 +201,16 @@ export function playGame(botName: string, seed: string, o: PlayOpts = {}): GameR
 	let maxHoldShadow = 0;
 	let minNetAll = 0;
 	let maxNetAll = 0;
+	const tr: Track = { opTeam: new Map(), caseTag: new Map(), lineMoneyPending: 0 };
 	const scan = () => {
 		for (const e of s.log) {
 			if (e.id <= lastLogId) continue;
-			countEvent(s, e, counts, firsts);
+			countEvent(s, e, counts, firsts, tr);
 			if (e.kind === 'month_money') lastMoney = { income: Number(e.data.income), expenses: Number(e.data.expenses) };
 		}
 		lastLogId = s.log.length ? s.log[s.log.length - 1].id : lastLogId;
+		for (const op of s.operations) tr.opTeam.set(op.id, { type: op.type, size: op.agentIds.length });
+		for (const cs of s.cases) if (cs.tag) tr.caseTag.set(cs.id, cs.tag);
 		for (const a of s.agents) {
 			if (a.moleFor && !moles.has(a.id)) {
 				moles.add(a.id);
@@ -182,8 +231,21 @@ export function playGame(botName: string, seed: string, o: PlayOpts = {}): GameR
 		bot(s);
 		scan();
 		const before = s.day;
+		const h84 = s.counters.hold1984Days;
+		const hsh = s.counters.holdShadowDays;
 		advance(s, step, { ignorePause: true });
 		scan();
+		// Срыв удержания (D-069 §10.5): счётчик был > 0 и не вырос на число прошедших дней.
+		const dd = s.day - before;
+		if (h84 > 0 && s.outcome.status === 'active' && s.counters.hold1984Days < h84 + dd) {
+			inc(counts, 'hold1984_break');
+			if (h84 >= 30) inc(counts, 'hold1984_break30');
+			counts.hold1984_break_maxDays = Math.max(counts.hold1984_break_maxDays ?? 0, h84);
+		}
+		if (hsh > 0 && s.outcome.status === 'active' && s.counters.holdShadowDays < hsh + dd) {
+			inc(counts, 'holdShadow_break');
+			if (hsh >= 30) inc(counts, 'holdShadow_break30');
+		}
 		maxInv = Math.max(maxInv, s.investigation);
 		maxExp = Math.max(maxExp, s.exposure);
 		maxUnrest = Math.max(maxUnrest, s.unrest);
@@ -208,7 +270,16 @@ export function playGame(botName: string, seed: string, o: PlayOpts = {}): GameR
 			}
 		}
 	}
+	if (teamStats.reinforced) counts.reinforced = teamStats.reinforced;
 	const o2 = s.outcome;
+	const hist: Record<string, number> = {};
+	for (const [k, v] of Object.entries(s.history)) hist['h_' + k] = typeof v === 'number' ? v : typeof v === 'boolean' ? (v ? 1 : 0) : 0;
+	const rh = s.plan.ratioHistory;
+	const ry: Record<string, number | null> = {};
+	for (let y = 1; y <= 5; y++) {
+		const xs = rh.slice((y - 1) * 4, y * 4);
+		ry['ry' + y] = xs.length ? +(xs.reduce((a, b) => a + b, 0) / xs.length).toFixed(3) : null;
+	}
 	const result = o2.status === 'won' ? `win:${o2.victoryPath}` : o2.status === 'lost' ? `loss:${o2.defeatReason}` : 'loss:stuck';
 	return {
 		bot: botName,
@@ -254,7 +325,12 @@ export function playGame(botName: string, seed: string, o: PlayOpts = {}): GameR
 			minNetMax: minNetAll,
 			maxNetMax: maxNetAll,
 			deptLevels: Object.values(s.departments).join('/'),
-			kompOnPlayer: s.rivals.reduce((a, r) => a + r.kompromatOnPlayer, 0)
+			kompOnPlayer: s.rivals.reduce((a, r) => a + r.kompromatOnPlayer, 0),
+			...hist,
+			...ry,
+			electionResult: s.election.result ?? 'none',
+			meddling: s.history.electionMeddling,
+			monthsPlayed: Math.ceil(s.day / 30)
 		},
 		curves
 	};

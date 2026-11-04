@@ -1,6 +1,6 @@
 // Селекторы для экранов (§10.3). Только чтение: ни RNG, ни мутаций.
 import { BALANCE as B } from './balance';
-import { agentSalary, currentAgentCap, jurisdictionPoints } from './agents';
+import { agentSalary, currentAgentCap, hasPerk, jurisdictionPoints } from './agents';
 import { creditLimit, opCost, survRequiredByRepression, validateAction } from './actions';
 import { canBuildDept, canBuildRepr, canBuildSurv, canResearch } from './development';
 import { bankruptHardFloor, incomeForMonth, monthlyExpenses, type ExpenseBreakdown } from './economy';
@@ -8,6 +8,7 @@ import { agentById, dept, dirtyCostMult, kompromatActive, month } from './effect
 import {
 	absorbChance,
 	deptCost,
+	recruitChance,
 	leakRevealChance,
 	loyaltyCheckChance,
 	poachMoleChance,
@@ -24,11 +25,14 @@ import {
 	termDays,
 	warrantDays
 } from './formulas';
-import { caseAccessible, caseInterceptable, computeOpChance, targetDifficulty } from './ops';
+import { caseAccessible, caseChanceBonus, caseInterceptable, computeOpShownChance, nextReinforceBonus, opChanceArgs, targetDifficulty } from './ops';
 import { recruitMethodAvailable } from './networks';
 import { collapseDisbandDay } from './rivals';
 import { questChoices, type QuestChoice } from './quests';
 import { victoryConditions } from './victory';
+import { blockingSession } from './dilemmas';
+import { lineStageChance } from './line';
+export { selectEpilogue, epilogueVerdict, hiddenSins, revealedSecrets, type EpilogueView, type EpilogueLine, type EpilogueVerdict } from './epilogue';
 import type { Agent, Case, DeptKey, GameState, Legend, OpTarget, OpType, QuestSession, RecruitMethod, RivalId, TechId, VictoryPath } from './types';
 import { DEPT_KEYS, LEGENDS, RECRUIT_METHODS, TECH_IDS } from './types';
 
@@ -142,7 +146,22 @@ export interface OpPreviewInput {
 	target?: OpTarget;
 }
 
-/** Шанс до старта (§10.3: «шанс показывается до старта»), цена, длительность и ошибка валидации. */
+/**
+ * Особая польза следующего агента (§5.1, §10.3): 'cover' — на теракте каждый агент снижает гибель
+ * остальных при провале. «Хороший/плохой коп» на расследовании — после v1 (D-068): мини-игры допроса
+ * в v1 нет, превью её не обещает.
+ */
+export type TeamSpecial = 'cover' | null;
+
+function nextAgentSpecial(type: OpType): TeamSpecial {
+	return type === 'terror' ? 'cover' : null;
+}
+
+/**
+ * Шанс до старта (§10.3): p_shown по §5.2 на текущем составе, **без** штрафа крота (D-066), цена,
+ * длительность и ошибка валидации. nextAgentBonus — прибавка слота подкрепления от ещё одного
+ * агента (0.06, затем 0.04; null — команда полная), nextAgentSpecial — особая польза напарника.
+ */
 export function previewOperation(s: GameState, p: OpPreviewInput) {
 	const team = p.agentIds.map((id) => agentById(s, id)).filter((x): x is Agent => !!x);
 	const c = p.caseId !== undefined ? s.cases.find((x) => x.id === p.caseId) : undefined;
@@ -151,25 +170,31 @@ export function previewOperation(s: GameState, p: OpPreviewInput) {
 	const illegal = target?.kind === 'senator' || target?.kind === 'president';
 	const warrant = p.opType === 'surveillance' && s.survLevel < 6 && !illegal ? warrantDays(dept(s, 'legal')) : 0;
 	return {
-		chance: computeOpChance(s, { type: p.opType, difficulty, target, team }),
+		chance: computeOpShownChance(s, { type: p.opType, difficulty, target, team, extraBonus: caseChanceBonus(c, p.opType) }),
 		cost: opCost(s, p.opType, target),
 		days: warrant + opDuration(p.opType, s.survLevel),
 		warrantDays: warrant,
 		difficulty,
+		nextAgentBonus: nextReinforceBonus(p.opType, team.length, false),
+		nextAgentSpecial: nextAgentSpecial(p.opType),
 		error: validateAction(s, { type: 'startOp', ...p })
 	};
 }
 
+/** Идущие операции: прогресс и p_shown (без штрафа крота, D-066); nextAgentBonus — прибавка от подкрепления сейчас. */
 export function selectOperations(s: GameState) {
 	return s.operations.map((op) => {
 		const team = op.agentIds.map((id) => agentById(s, id)).filter((x): x is Agent => !!x);
 		const span = Math.max(1, op.endDay - op.startDay);
+		const progress = Math.min(1, (s.day - op.startDay) / span);
 		return {
 			...op,
-			progress: Math.min(1, (s.day - op.startDay) / span),
+			progress,
 			daysLeft: op.endDay - s.day,
 			inWarrant: s.day < op.warrantEndDay,
-			chance: computeOpChance(s, { type: op.type, difficulty: op.difficulty, target: op.target, team, lateIds: op.extraJoinedLate })
+			chance: computeOpShownChance(s, opChanceArgs(s, op)),
+			nextAgentBonus: nextReinforceBonus(op.type, team.length, progress >= 0.5),
+			nextAgentSpecial: nextAgentSpecial(op.type)
 		};
 	});
 }
@@ -321,6 +346,16 @@ export interface ActionCosts {
 	rivals: Record<RivalId, { sabotage: ActionCostView; lobby: ActionCostView; poach: ActionCostView; absorb: ActionCostView }>;
 	/** По предмету компромата на живого соперника. */
 	leak: LeakCostView[];
+	/** Шантаж сенатора (§9.5): по действующему предмету компромата на сенатора; risk — QUEST_SENATOR.scandalP. */
+	blackmail: BlackmailCostView[];
+}
+
+export interface BlackmailCostView extends ActionCostView {
+	kompromatId: number;
+	senatorId: string;
+	strength: number;
+	/** Прирост влияния игрока при шантаже. */
+	influenceGain: number;
 }
 
 const view = (cost: number, influence: number, readyInDays: number, chance: number | null, risk: number | null, error: string | null): ActionCostView => ({
@@ -367,8 +402,21 @@ export function selectActionCosts(s: GameState): ActionCosts {
 			targetRepDelta: B.ACT_LEAK.repPerStrength * k.strength
 		});
 	}
+	const blackmail: BlackmailCostView[] = [];
+	for (const k of s.kompromat) {
+		if (k.target.kind !== 'senator' || !kompromatActive(s, k)) continue;
+		const S = B.QUEST_SENATOR;
+		blackmail.push({
+			...view(0, 0, (k.usedCooldownUntil ?? 0) - s.day, null, S.scandalP, validateAction(s, { type: 'blackmail', kompromatId: k.id })),
+			kompromatId: k.id,
+			senatorId: k.target.id,
+			strength: k.strength,
+			influenceGain: S.blackmailInflBase + S.blackmailInflPerStrength * k.strength
+		});
+	}
 	const firstRivalK = s.kompromat.find((k) => k.target.kind === 'rival' && kompromatActive(s, k));
 	return {
+		blackmail,
 		counterKompromat: view(
 			0,
 			0,
@@ -408,8 +456,13 @@ export function selectDeployCost(s: GameState, legend: Legend, recruit: RecruitM
 	return { legendCost, recruitCost, total, canAfford: s.budget >= total };
 }
 
-/** Все варианты заброски для формы: легенды и способы вербовки с ценами и шансами. */
-export function selectDeployOptions(s: GameState) {
+/**
+ * Все варианты заброски для формы: легенды и способы вербовки с ценами и шансами.
+ * agentId — выбранный агент: шанс вербовки учитывает его перк «Переговорщик» (§9.1 шаг 4, D-068).
+ */
+export function selectDeployOptions(s: GameState, agentId?: number) {
+	const ag = agentId !== undefined ? agentById(s, agentId) : undefined;
+	const negotiator = !!ag && hasPerk(ag, 'negotiator');
 	return {
 		legends: LEGENDS.map((l) => ({
 			legend: l,
@@ -421,7 +474,7 @@ export function selectDeployOptions(s: GameState) {
 		recruit: RECRUIT_METHODS.map((m) => ({
 			method: m,
 			cost: m === 'money' ? B.RECRUIT_METHODS.money.cost : 0,
-			chance: B.RECRUIT_METHODS[m].p,
+			chance: recruitChance(B.RECRUIT_METHODS[m].p, negotiator),
 			available: recruitMethodAvailable(s, m)
 		})),
 		prepDays: B.ZABROSKA_PREP_DAYS,
@@ -508,4 +561,50 @@ export function selectSurvRollbackFloor(s: GameState): number {
 /** Номер месяца, который закончится следующим (для грейса банкротства). */
 function nextMonthEndMonth(s: GameState): number {
 	return Math.floor(s.day / B.DAYS_PER_MONTH) + 1;
+}
+
+// ------------------------------------------------------------ линейка «Народный авангард» (§9.9)
+
+export interface LineView {
+	stage: number;
+	/** 'stage' — этап идёт; 'pause' — пауза перед окном; 'window' — открыто окно выбора. */
+	phase: 'stage' | 'pause' | 'window';
+	daysLeft: number | null;
+	leadId: number;
+	partnerId: number | null;
+	variant2: number | null;
+	variant3: number | null;
+	/** Шанс идущего этапа (§9.9), иначе null. */
+	chance: number | null;
+	/** Код ошибки lineRecall или null — можно отозвать сейчас. */
+	recallError: string | null;
+}
+
+/** Состояние линейки для экрана (null — линейки нет). nextOfferDay — не раньше какого дня новое предложение. */
+export function selectLine(s: GameState): { line: LineView | null; nextOfferDay: number } {
+	const L = s.line;
+	if (!L) return { line: null, nextOfferDay: s.lineNextOfferDay };
+	const lead = agentById(s, L.leadId);
+	const key = L.stage === 1 ? 's1' : L.stage === 2 ? (L.variant2 === 1 ? 's2_devoted' : 's2_cautious') : L.stage === 3 ? (L.variant3 === 1 ? 's3_provoke' : 's3_evidence') : 's4';
+	const phase = L.stageEndDay !== null ? 'stage' : L.pauseUntilDay !== null ? 'pause' : 'window';
+	return {
+		line: {
+			stage: L.stage,
+			phase,
+			daysLeft: L.stageEndDay !== null ? L.stageEndDay - s.day : L.pauseUntilDay !== null ? L.pauseUntilDay - s.day : null,
+			leadId: L.leadId,
+			partnerId: L.partnerId,
+			variant2: L.variant2,
+			variant3: L.variant3,
+			chance: phase === 'stage' && lead ? lineStageChance(lead, L.partnerId !== null, key) : null,
+			recallError: validateAction(s, { type: 'lineRecall' })
+		},
+		nextOfferDay: s.lineNextOfferDay
+	};
+}
+
+/** Открытое модальное окно дилеммы или линейки, ждущее выбора (время стоит), или null. */
+export function selectBlockingQuest(s: GameState): (QuestSession & { choices: QuestChoice[] }) | null {
+	const q = blockingSession(s);
+	return q ? { ...q, choices: questChoices(s, q) } : null;
 }

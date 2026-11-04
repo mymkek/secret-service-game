@@ -32,7 +32,7 @@
 
 <div class="space-y-4">
 	{#if !hasB1}
-		<p class="rounded border border-warn bg-warn/10 px-3 py-2 text-sm text-warn">Сети за рубежом открываются технологией B1 («Разведка»). Изучите её на экране «Отделы и технологии».</p>
+		<p class="rounded-2xl border border-warn/50 bg-warn/10 px-4 py-3 text-sm text-warn">Сети за рубежом открываются технологией B1 («Разведка»). Изучите её на экране «Отделы и технологии».</p>
 	{/if}
 
 	<section class="grid gap-3 md:grid-cols-2 xl:grid-cols-3" aria-label="Сети">
@@ -45,7 +45,7 @@
 				<Bar label="Прогресс сети" value={Math.round(n.progress * 100)} suffix="%" tone="fbi" />
 				<div class="text-xs text-muted">Агентов в сети: {n.agentIds.length}{n.doubleAgentActive ? ' · есть двойной агент!' : ''}{n.purgeUntilDay > day ? ` · чистка ещё ${n.purgeUntilDay - day} дн.` : ''}</div>
 				{#each n.missions as m (m.id)}
-					<div class="rounded bg-bg px-2 py-1 text-xs">
+					<div class="rounded-lg bg-surface-1 px-2 py-1 text-xs">
 						{game.agentNameById(m.agentId)}: {STAGE[m.stage] ?? m.stage}, ещё {Math.max(0, m.stageEndDay - day)} дн. · {LEGEND_LABEL[m.legend]}, {RECRUIT_LABEL[m.recruit]}
 					</div>
 				{/each}
@@ -57,23 +57,23 @@
 		<h2 class="h2">Заброска агента</h2>
 		<div class="flex flex-wrap items-end gap-3 text-sm">
 			<label class="flex flex-col gap-1"><span class="text-xs text-muted">Агент</span>
-				<select class="rounded border border-line bg-bg px-2 py-1.5" bind:value={agentId}>
+				<select bind:value={agentId}>
 					<option value="">Выберите…</option>
 					{#each idle as a (a.id)}<option value={String(a.id)}>{game.agentName(a)}</option>{/each}
 				</select>
 			</label>
 			<label class="flex flex-col gap-1"><span class="text-xs text-muted">Страна</span>
-				<select class="rounded border border-line bg-bg px-2 py-1.5" bind:value={countryId}>
+				<select bind:value={countryId}>
 					{#each nets as n (n.countryId)}<option value={n.countryId}>{countryName(n.countryId)}</option>{/each}
 				</select>
 			</label>
 			<label class="flex flex-col gap-1"><span class="text-xs text-muted">Легенда</span>
-				<select class="rounded border border-line bg-bg px-2 py-1.5" bind:value={legend}>
+				<select bind:value={legend}>
 					{#each opts?.legends ?? [] as l (l.legend)}<option value={l.legend}>{LEGEND_LABEL[l.legend]} — {fmtMoney(l.cost)}</option>{/each}
 				</select>
 			</label>
 			<label class="flex flex-col gap-1"><span class="text-xs text-muted">Вербовка источника</span>
-				<select class="rounded border border-line bg-bg px-2 py-1.5" bind:value={recruit}>
+				<select bind:value={recruit}>
 					{#each opts?.recruit ?? [] as r (r.method)}<option value={r.method} disabled={!r.available}>{RECRUIT_LABEL[r.method]}{r.cost ? ` — ${fmtMoney(r.cost)}` : ''} · шанс {Math.round(r.chance * 100)}%{r.available ? '' : ' (недоступно)'}</option>{/each}
 				</select>
 			</label>
@@ -92,15 +92,16 @@
 			<h2 class="h2">Отозвать агентов</h2>
 			<ul class="space-y-1 text-sm">
 				{#each abroad as a (a.id)}
-					<li class="flex items-center justify-between rounded border border-line bg-bg px-2 py-1">
+					<li class="flex items-center justify-between rounded-xl bg-surface-1 px-3 py-1.5">
 						<span>{game.agentName(a)} — за рубежом</span>
-						<button class="btn px-2 py-0.5 text-xs" onclick={() => game.act({ type: 'recallAgent', agentId: a.id }, 'Агент отозван')}>Отозвать</button>
+						<button class="btn btn-sm" onclick={() => game.act({ type: 'recallAgent', agentId: a.id }, 'Агент отозван')}>Отозвать</button>
 					</li>
 				{/each}
 				{#each embedded as a (a.id)}
-					<li class="flex items-center justify-between rounded border border-line bg-bg px-2 py-1">
-						<span>{game.agentName(a)} — внедрён</span>
-						<button class="btn px-2 py-0.5 text-xs" onclick={() => game.act({ type: 'recallEmbedded', agentId: a.id }, 'Агент отозван')}>Отозвать</button>
+					{@const onLine = !!a.location && 'lineId' in a.location}
+					<li class="flex items-center justify-between rounded-xl bg-surface-1 px-3 py-1.5">
+						<span>{game.agentName(a)} — {onLine ? 'на линейке «Народный авангард»' : 'внедрён'}</span>
+						<button class="btn btn-sm" disabled={onLine} title={onLine ? errorText('agent_on_line') + '. Отзыв: вкладка «Операции».' : undefined} onclick={() => game.act({ type: 'recallEmbedded', agentId: a.id }, 'Агент отозван')}>Отозвать</button>
 					</li>
 				{/each}
 			</ul>

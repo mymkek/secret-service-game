@@ -289,41 +289,76 @@ export function opDuration(type: OpType, survLevel: number): number {
 	return base;
 }
 
+/**
+ * §5.2, D-066: прибавка подкрепления. slotsLate[i] — присоединился ли агент слота i после 50 % срока.
+ * Слоты сверх OP_REINFORCE_BONUS_BY_SLOT не дают ничего. Каждый слот ≥ 0, поэтому сумма не убывает.
+ */
+export function reinforceBonus(slotsLate: readonly boolean[]): number {
+	const by = B.OP_REINFORCE_BONUS_BY_SLOT;
+	let sum = 0;
+	for (let i = 0; i < Math.min(slotsLate.length, by.length); i++) sum += by[i] * (slotsLate[i] ? B.OP_LATE_REINFORCE_FACTOR : 1);
+	return sum;
+}
+
 export interface OpChanceInput {
 	type: OpType;
 	difficulty: number;
 	/** max primarySkill по команде */
 	teamSkill: number;
-	/** средний level команды */
+	/** max level по команде (D-066; было среднее) */
 	teamLevel: number;
-	/** Σ подкреплений: 1 до 50 % прогресса, 0.5 после; не более 2 агентов */
-	extra: number;
+	/** Σ слотов подкрепления — reinforceBonus(...) */
+	reinforce: number;
 	deptLevel: number;
-	/** сумма бонусов из таблицы §5.2 (перки, трейты, слежка, технологии) */
+	/** сумма бонусов из таблицы §5.2 (перки, трейты, слежка, технологии, дилеммы §9.8) */
 	bonus: number;
 	hasMole: boolean;
 }
 
-/** §5.2: шанс успеха операции. Пример месяца 1 из ГДД даёт 0.52. */
-export function opSuccessChance(p: OpChanceInput): number {
+/** §5.2, D-066: p_shown — шанс, который видит игрок. Без штрафа крота: превью не выдаёт крота. */
+export function opShownChance(p: Omit<OpChanceInput, 'hasMole'>): number {
 	return clamp(
 		B.OP_BASE_CHANCE[p.type] +
 			B.OP_SKILL_COEF * (p.teamSkill - B.OP_SKILL_PIVOT) +
 			B.OP_DEPT_COEF * p.deptLevel +
 			B.OP_LEVEL_COEF * (p.teamLevel - 1) +
-			B.OP_REINFORCE_BONUS * p.extra -
+			p.reinforce -
 			B.OP_DIFFICULTY_COEF * (p.difficulty - 1) +
-			p.bonus -
-			B.OP_MOLE_PENALTY * ind(p.hasMole),
+			p.bonus,
 		B.OP_CHANCE_MIN,
 		B.OP_CHANCE_MAX
 	);
 }
 
-/** §5.3: шанс гибели агента при провале «Поимки террористов». */
-export function terrorDeathChance(combat: number, marksman: boolean): number {
+/** §5.2, D-066: p — шанс броска: p_shown минус штраф крота, снова в [OP_CHANCE_MIN, OP_CHANCE_MAX]. */
+export function opRollChance(pShown: number, hasMole: boolean): number {
+	return clamp(pShown - B.OP_MOLE_PENALTY * ind(hasMole), B.OP_CHANCE_MIN, B.OP_CHANCE_MAX);
+}
+
+/** §5.2: шанс броска одной функцией (p_shown → p). Пример месяца 1 (D-066): опытный один на d3 — 0.53. */
+export function opSuccessChance(p: OpChanceInput): number {
+	return opRollChance(opShownChance(p), p.hasMole);
+}
+
+/**
+ * §5.3, D-066: шанс гибели агента при провале «Поимки террористов».
+ * teamSize — размер команды на момент завершения: «прикрытие» −coverPerAgent за каждого другого агента.
+ */
+export function terrorDeathChance(combat: number, marksman: boolean, teamSize = 1): number {
 	const d = B.OP_TERROR_DEATH;
-	return clamp(d.base - d.perCombat * (combat - B.OP_SKILL_PIVOT) + (marksman ? B.PERK_EFFECTS.marksman.death : 0), d.min, d.max);
+	return clamp(
+		d.base -
+			d.perCombat * (combat - B.OP_SKILL_PIVOT) +
+			(marksman ? B.PERK_EFFECTS.marksman.death : 0) -
+			d.coverPerAgent * Math.max(0, teamSize - 1),
+		d.min,
+		d.max
+	);
+}
+
+/** §9.3, D-066: «Хороший/плохой коп» доступна, только если в команде расследования ≥ goodbad.agents (2). */
+export function goodBadCopAvailable(teamSize: number): boolean {
+	return teamSize >= B.INTERROGATION_TACTICS.goodbad.agents;
 }
 
 /** §5.3: награда за расследование / теракт. */
@@ -510,6 +545,14 @@ export function zabroskaInfiltrateChance(surveillance: number, bonus: number): n
 		B.ZABROSKA_CHANCE_MIN,
 		B.ZABROSKA_CHANCE_MAX
 	);
+}
+/**
+ * §9.1 шаг 4, §4.2.3, D-068: шанс вербовки источника за рубежом.
+ * clamp(RECRUIT_METHODS[способ].p + PERK_EFFECTS.negotiator.recruit · [negotiator], 0.05, 0.95);
+ * границы клампа ГДД задаёт числами 0.05..0.95 — это те же ZABROSKA_CHANCE_MIN/MAX заброски §9.1.
+ */
+export function recruitChance(baseP: number, negotiator: boolean): number {
+	return clamp(baseP + B.PERK_EFFECTS.negotiator.recruit * ind(negotiator), B.ZABROSKA_CHANCE_MIN, B.ZABROSKA_CHANCE_MAX);
 }
 /** §9.1: месячный вклад агента в прогресс сети. */
 export function netAgentProgress(surveillance: number, legend: number, language: boolean, hasB2: boolean): number {
