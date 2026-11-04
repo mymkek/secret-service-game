@@ -64,6 +64,7 @@ export const PATH_LABEL: Record<VictoryPath, string> = {
 };
 
 export const ERROR_LABEL: Record<string, string> = {
+	rival_collapsing: 'Соперник на грани: действие недоступно',
 	credit_limit: 'Превышен кредитный лимит',
 	repr_requires_surv: 'Сначала откатите репрессии: они требуют этого уровня слежки',
 	game_over: 'Партия окончена',
@@ -198,3 +199,9 @@ export function cardFallback(id: string): { title: string; body: string; tone: T
 	return r ? { title: r[0], body: r[1], tone: r[2] } : { title: id, body: '', tone: 'neutral' };
 }
 
+
+/** Игровой день -> «год, месяц, день» (30 дней в месяце). */
+export function fmtDay(day: number): string {
+	const m = Math.max(1, Math.ceil(day / 30));
+	return `год ${Math.ceil(m / 12)}, месяц ${m}, день ${((Math.max(1, day) - 1) % 30) + 1}`;
+}

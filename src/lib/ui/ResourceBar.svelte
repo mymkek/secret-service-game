@@ -17,7 +17,12 @@
 			<div class="text-[11px] tabular-nums {cr.debt > 0 ? 'text-warn' : 'text-muted'}" title="Кредит на операции: уход в минус не больше месячного дохода, {Math.round(cr.interestRate * 100)}% в месяц. Следующие проценты: {cr.nextInterest} k$">
 				Кредит: лимит {Math.round(cr.limit)}{cr.debt > 0 ? `, долг ${Math.round(cr.debt)} (проценты ${cr.nextInterest})` : ''}
 			</div>
-			{#if cr.bankruptStreak > 0}
+			{#if game.s && cr.debt > 0 && game.s.budget <= cr.hardFloor * 0.6}
+				<div class="text-[11px] font-semibold text-danger" role="alert">Долг приближается к {Math.round(cr.hardFloor)} k$: при таком долге банкротство наступит сразу!</div>
+			{/if}
+			{#if cr.bankruptGraceMonthsLeft > 0}
+				<div class="text-[11px] text-ok">Фора новичка: ещё {cr.bankruptGraceMonthsLeft} мес.</div>
+			{:else if cr.bankruptStreak > 0}
 				<div class="text-[11px] font-semibold {cr.bankruptStreak + 1 >= cr.bankruptMonths ? 'text-danger' : 'text-warn'}" role="alert">В минусе {cr.bankruptStreak} из {cr.bankruptMonths} мес. подряд: банкротство!</div>
 			{/if}
 		</div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { selectCases } from '../game/index';
+	import { selectCases, selectRivals } from '../game/index';
 	import { game } from './game.svelte';
 	import { MAP_H, MAP_STATES, MAP_W } from './map-data';
 	import { caseText, stateName } from './content';
@@ -7,6 +7,7 @@
 
 	let { selected = null, onselect }: { selected?: string | null; onselect: (id: string) => void } = $props();
 
+	const collapsing = $derived(game.s ? selectRivals(game.s).filter((r) => r.collapsing) : []);
 	const cases = $derived(game.s ? selectCases(game.s) : []);
 	const byState = $derived.by(() => {
 		const m = new Map<string, typeof cases>();
@@ -100,4 +101,7 @@
 	<li><span class="mr-1 inline-block h-3 w-3 rounded-sm align-middle" style="background: var(--color-usss)"></span>Секретная служба</li>
 	<li><span class="mr-1 inline-block h-3 w-3 rounded-full bg-gold align-middle"></span>Дело (число — дней до ухода)</li>
 	<li><span class="mr-1 inline-block h-3 w-3 rounded-full bg-danger align-middle"></span>Теракт</li>
+	{#each collapsing as r (r.id)}
+		<li class="text-warn">{rivalName(r.id)} — на грани, скоро выбудет</li>
+	{/each}
 </ul>

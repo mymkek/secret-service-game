@@ -82,6 +82,10 @@ describe('content: тексты событий', () => {
 	it('для каждого LOG_KINDS и PENDING_LOG_KINDS есть ровно один текст', () => {
 		const all = [...new Set<string>([...LOG_KINDS, ...PENDING_LOG_KINDS])];
 		expect(content.events.map((e) => e.kind).sort()).toEqual(all.sort());
+		const collapsing = renderLogEntry({ id: 8, day: 3, kind: 'rival_collapsing', data: { rivalId: 'cia', disbandDay: 90 }, source: null });
+		expect(collapsing.text).toContain('ЦРУ');
+		expect(collapsing.text).toContain('90');
+		expect(collapsing.text).not.toContain('{');
 		const burned: LogEntry = { id: 9, day: 3, kind: 'kompromat_burned', data: { kompromatId: 1, senatorId: 'senator_2' }, source: null };
 		const r = renderLogEntry(burned);
 		expect(r.text).toContain('Холлоуэй');
@@ -94,7 +98,7 @@ describe('content: тексты событий', () => {
 			'cardTitle', 'opName', 'courseName', 'rankName', 'legendName', 'methodName', 'archetypeName', 'actionText',
 			'ratioPct', 'sharePct', 'pathName', 'hearingReason', 'title', 'resultText', 'repLossRounded', 'senatorName'
 		];
-		const raw = ['level', 'difficulty', 'income', 'expenses', 'budget', 'streak', 'agents', 'missing', 'quarter', 'points', 'target'];
+		const raw = ['level', 'difficulty', 'income', 'expenses', 'budget', 'streak', 'agents', 'missing', 'quarter', 'points', 'target', 'disbandDay'];
 		const known = new Set([...derived, ...raw]);
 		for (const [kind, e] of Object.entries(eventTexts)) {
 			for (const m of e.text.matchAll(/\{([a-zA-Z0-9_]+)\}/g)) expect(known.has(m[1]), `${kind}: {${m[1]}}`).toBe(true);

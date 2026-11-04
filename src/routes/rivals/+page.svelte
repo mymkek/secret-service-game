@@ -2,7 +2,7 @@
 	import { selectActionCosts, selectKompromat, selectRivals, validateAction, type PlayerAction } from '../../lib/game/index';
 	import { game } from '../../lib/ui/game.svelte';
 	import { rivalDossiers } from '../../lib/content/index';
-	import { AGENCY_VAR, errorText, rivalName } from '../../lib/ui/labels';
+	import { AGENCY_VAR, errorText, fmtDay, rivalName } from '../../lib/ui/labels';
 	import ActionButton from '../../lib/ui/ActionButton.svelte';
 	import { senatorName } from '../../lib/ui/content';
 	import Bar from '../../lib/ui/Bar.svelte';
@@ -38,9 +38,10 @@
 
 	<section aria-label="Досье на конкурентов" class="grid gap-3 lg:grid-cols-3">
 		{#each rivals as r (r.id)}
-			<article class="card space-y-3 text-sm {r.alive ? '' : 'opacity-60'}" style="border-top: 3px solid {AGENCY_VAR[r.id]}" aria-label={rivalName(r.id)}>
+			<article class="card space-y-3 text-sm {r.alive ? '' : 'opacity-60'}" style="border-top: 3px solid {r.collapsing ? 'var(--color-warn)' : AGENCY_VAR[r.id]}" aria-label={rivalName(r.id)}>
 				<header class="flex items-baseline justify-between">
 					<h2 class="text-base font-semibold">{rivalName(r.id)}</h2>
+					{#if r.collapsing}<span class="chip border-warn text-warn">на грани — выбудет: {r.disbandDay !== null ? fmtDay(r.disbandDay) : 'скоро'}</span>{/if}
 					<span class="chip">{r.absorbed ? 'поглощён' : r.alive ? `доля ${Math.round(r.share * 100)}%` : 'расформирован'}</span>
 				</header>
 				<p class="text-xs text-muted italic">{rivalDossiers[r.id].motto}</p>
@@ -61,7 +62,7 @@
 					<div class="flex flex-wrap gap-2">
 						{#each ACTIONS as a (a.type)}
 							{#if costs}
-								<ActionButton label={a.label} v={costs.rivals[r.id][a.type]} onclick={() => game.act({ type: a.type, rivalId: r.id }, a.ok)} />
+								<ActionButton label={a.type === 'absorb' && r.collapsing ? 'Поглотить (на грани: шанс выше)' : a.label} v={costs.rivals[r.id][a.type]} onclick={() => game.act({ type: a.type, rivalId: r.id }, a.ok)} />
 							{/if}
 						{/each}
 					</div>
@@ -100,7 +101,9 @@
 								{/if}
 							{/if}
 							<button class="btn px-2 py-0.5 text-xs" disabled={!!err({ type: 'blackmail', kompromatId: k.id })} title={errorText(err({ type: 'blackmail', kompromatId: k.id }))} onclick={() => game.act({ type: 'blackmail', kompromatId: k.id }, 'Шантаж')}>Шантаж</button>
-							<button class="btn px-2 py-0.5 text-xs" disabled={!!err({ type: 'counterKompromat', kompromatId: k.id })} title={errorText(err({ type: 'counterKompromat', kompromatId: k.id }))} onclick={() => game.act({ type: 'counterKompromat', kompromatId: k.id }, 'Контр-компромат')}>Контр-компромат</button>
+							{#if costs}
+								<ActionButton label="Контр-компромат" v={{ ...costs.counterKompromat, error: costs.counterKompromat.error ?? err({ type: 'counterKompromat', kompromatId: k.id }) }} onclick={() => game.act({ type: 'counterKompromat', kompromatId: k.id }, 'Контр-компромат')} />
+							{/if}
 						</div>
 					</li>
 				{:else}

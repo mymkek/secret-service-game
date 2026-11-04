@@ -10,7 +10,24 @@ type Sev = 'info' | 'success' | 'warning' | 'danger';
 
 // PendingLogKind: виды, ещё не перенесённые в LOG_KINDS. Когда ядро их перенесёт, тип PendingLogKind
 // станет пустым (never), а записи ниже останутся валидными: объединение типов не изменится.
-export const eventTexts: Record<LogKind | PendingLogKind, { text: string; severity: Sev }> = {
+type EventTextDef = { text: string; severity: Sev };
+
+/**
+ * Виды, текст к которым написан раньше, чем ядро добавило их в LOG_KINDS/PENDING_LOG_KINDS.
+ * Когда вид появится в ядре, ничего менять не нужно: он исключён из строгого типа baseTexts
+ * (Exclude), а bundle.ts включает такие записи в бандл только если вид известен схеме.
+ * После появления вида в ядре запись можно перенести в baseTexts и убрать из FutureLogKind.
+ */
+export type FutureLogKind = 'rival_collapsing';
+
+export const futureEventTexts: Record<FutureLogKind, EventTextDef> = {
+	rival_collapsing: {
+		text: '{rivalName} на грани краха: репутация обнулена. До дня {disbandDay} он бездействует и может быть поглощён на льготных условиях.',
+		severity: 'success'
+	}
+};
+
+const baseTexts: Record<Exclude<LogKind | PendingLogKind, FutureLogKind>, EventTextDef> = {
 	kompromat_burned: { text: '{senatorName} сорвался, и компромат на него сгорел. Хранить такое стоило не рядом с камином.', severity: 'danger' },
 	absorb_failed: { text: 'Поглощение {rivalName} сорвалось. Влияние потеряно, обида осталась.', severity: 'warning' },
 	agent_captured: { text: '{agentName} задержан противником. Возвращать его никто не планирует.', severity: 'danger' },
@@ -81,4 +98,10 @@ export const eventTexts: Record<LogKind | PendingLogKind, { text: string; severi
 	unrest_threshold: { text: 'Недовольство достигло порога {level}. Улицы напряжены.', severity: 'danger' },
 	victory: { text: 'Победа: {pathName}.', severity: 'success' },
 	zabroska_failed: { text: '{agentName} провалил заброску в страну {countryName}. Возвращаться ему некуда.', severity: 'danger' }
+};
+
+/** Все тексты событий (строгие и «будущие»). */
+export const eventTexts: Record<Exclude<LogKind | PendingLogKind, FutureLogKind>, EventTextDef> & Record<FutureLogKind, EventTextDef> = {
+	...baseTexts,
+	...futureEventTexts
 };
